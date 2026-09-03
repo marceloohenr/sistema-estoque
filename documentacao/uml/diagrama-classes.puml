@@ -1,0 +1,88 @@
+@startuml
+title SaaS de Gestão de Estoque - Diagrama de Classes
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam class {
+  BackgroundColor #EAF3F8
+  BorderColor #1F4E78
+  ArrowColor #64748B
+}
+
+enum PerfilUsuario {
+  ADMINISTRADOR
+  OPERADOR
+}
+
+enum TipoMovimentacao {
+  ENTRADA
+  SAIDA
+  AJUSTE
+}
+
+class Usuario {
+  +id: UUID
+  +nome: String
+  +email: String
+  +senhaHash: String
+  +perfil: PerfilUsuario
+  +ativo: Boolean
+  +autenticar()
+}
+
+class Categoria {
+  +id: UUID
+  +nome: String
+  +descricao: String
+}
+
+class Fornecedor {
+  +id: UUID
+  +nome: String
+  +cnpj: String
+  +telefone: String
+  +email: String
+}
+
+class Produto {
+  +id: UUID
+  +codigo: String
+  +nome: String
+  +unidadeMedida: String
+  +estoqueMinimo: Decimal
+  +ativo: Boolean
+  +validarSaldo()
+}
+
+class Estoque {
+  +id: UUID
+  +quantidadeAtual: Decimal
+  +atualizarSaldo()
+  +estaAbaixoDoMinimo()
+}
+
+class MovimentacaoEstoque {
+  +id: UUID
+  +tipo: TipoMovimentacao
+  +quantidade: Decimal
+  +dataHora: DateTime
+  +motivo: String
+  +registrar()
+}
+
+class AlertaEstoque {
+  +id: UUID
+  +mensagem: String
+  +dataGeracao: DateTime
+  +lido: Boolean
+  +marcarComoLido()
+}
+
+Categoria "1" -- "0..*" Produto : classifica >
+Fornecedor "1" -- "0..*" Produto : fornece >
+Produto "1" *-- "1" Estoque : possui >
+Produto "1" -- "0..*" MovimentacaoEstoque : movimenta >
+Usuario "1" -- "0..*" MovimentacaoEstoque : registra >
+Produto "1" -- "0..*" AlertaEstoque : gera >
+Estoque ..> AlertaEstoque : verifica nível mínimo >
+MovimentacaoEstoque ..> Estoque : atualiza saldo >
+@enduml

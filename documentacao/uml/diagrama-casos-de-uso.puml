@@ -1,0 +1,43 @@
+@startuml
+title SaaS de Gestão de Estoque - Diagrama de Casos de Uso
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam usecase {
+  BackgroundColor #EAF3F8
+  BorderColor #1F4E78
+}
+
+actor "Administrador" as Admin
+actor "Operador de Estoque" as Operador
+Admin --|> Operador : também executa
+
+rectangle "SaaS de Gestão de Estoque" {
+  usecase "Autenticar-se" as UCLogin
+  usecase "Gerenciar produtos,\ncategorias e fornecedores" as UCProducts
+  usecase "Gerenciar usuários\ne permissões" as UCUsers
+  usecase "Visualizar dashboard\ne gerar relatórios" as UCDashboard
+  usecase "Consultar auditoria\nde movimentações" as UCAudit
+  usecase "Registrar movimentações\nde estoque" as UCMove
+  usecase "Registrar entrada" as UCEntry
+  usecase "Registrar saída" as UCExit
+  usecase "Ajustar inventário" as UCAdjust
+  usecase "Consultar estoque\natual e histórico" as UCStock
+  usecase "Consultar avisos de\nestoque baixo" as UCAlerts
+}
+
+Admin --> UCProducts
+Admin --> UCUsers
+Admin --> UCDashboard
+Admin --> UCAudit
+
+Operador --> UCLogin
+Operador --> UCMove
+Operador --> UCStock
+
+UCMove .> UCEntry : <<include>>
+UCMove .> UCExit : <<include>>
+UCMove .> UCAdjust : <<include>>
+UCDashboard .> UCStock : <<include>>
+UCAlerts .> UCStock : <<extend>>
+@enduml
