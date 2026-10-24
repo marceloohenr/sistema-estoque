@@ -6,38 +6,50 @@ skinparam shadowing false
 skinparam usecase {
   BackgroundColor #EAF3F8
   BorderColor #1F4E78
+  FontColor #123B5D
+  FontSize 15
 }
+skinparam ArrowColor #64748B
 
 actor "Administrador" as Admin
 actor "Operador de Estoque" as Operador
-Admin --|> Operador : também executa
 
 rectangle "SaaS de Gestão de Estoque" {
   usecase "Autenticar-se" as UCLogin
   usecase "Gerenciar produtos,\ncategorias e fornecedores" as UCProducts
   usecase "Gerenciar usuários\ne permissões" as UCUsers
-  usecase "Visualizar dashboard\ne gerar relatórios" as UCDashboard
+  usecase "Visualizar dashboard" as UCDashboard
+  usecase "Gerar relatórios" as UCReports
   usecase "Consultar auditoria\nde movimentações" as UCAudit
-  usecase "Registrar movimentações\nde estoque" as UCMove
+  usecase "Registrar movimentação\nde estoque" as UCMove
   usecase "Registrar entrada" as UCEntry
   usecase "Registrar saída" as UCExit
   usecase "Ajustar inventário" as UCAdjust
   usecase "Consultar estoque\natual e histórico" as UCStock
-  usecase "Consultar avisos de\nestoque baixo" as UCAlerts
+  usecase "Gerar aviso de\nestoque baixo" as UCAlerts
 }
 
 Admin --> UCProducts
 Admin --> UCUsers
+Admin --> UCLogin
 Admin --> UCDashboard
+Admin --> UCReports
 Admin --> UCAudit
 
 Operador --> UCLogin
 Operador --> UCMove
 Operador --> UCStock
 
-UCMove .> UCEntry : <<include>>
-UCMove .> UCExit : <<include>>
-UCMove .> UCAdjust : <<include>>
+UCEntry .> UCMove : <<include>>
+UCExit .> UCMove : <<include>>
+UCAdjust .> UCMove : <<include>>
 UCDashboard .> UCStock : <<include>>
-UCAlerts .> UCStock : <<extend>>
+UCReports .> UCStock : <<include>>
+UCAlerts .> UCMove : <<extend>>
+
+note right of UCAlerts
+  Condição do <<extend>>:
+  após uma movimentação,
+  quantidade atual <= estoque mínimo.
+end note
 @enduml

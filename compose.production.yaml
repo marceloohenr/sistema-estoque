@@ -1,0 +1,98 @@
+services:
+  banco:
+    image: postgres:16-alpine@sha256:f4610795587492cd4fb887c2dc3de301b813278bb6f616992061141b5f15ac36
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB no .env.production}
+      POSTGRES_USER: ${POSTGRES_INIT_USER:?Defina POSTGRES_INIT_USER no .env.production}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      APP_DB_USER: ${APP_DB_USER:-estoque_app}
+      APP_DB_PASSWORD_FILE: /run/secrets/app_database_password
+    secrets:
+      - postgres_password
+      - app_database_password
+    volumes:
+      - dados_postgres_producao:/var/lib/postgresql/data
+      - ./infra/postgres/init-app-user.sh:/docker-entrypoint-initdb.d/10-create-app-user.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["npm", "run", "start"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL_FILE: /run/secrets/database_url
+      SESSION_SECRET_FILE: /run/secrets/session_secret
+      APP_ORIGIN: ${APP_ORIGIN:?Defina a origem HTTPS pública no .env.production}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      SEED_USERS: "false"
+    secrets:
+      - database_url
+      - session_secret
+    volumes:
+      - uploads_producao:/app/uploads
+    depends_on:
+      banco:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.prod
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+      - /var/cache/nginx:rw,noexec,nosuid,size=64m,uid=101,gid=101,mode=0755
+      - /run:rw,noexec,nosuid,size=16m,uid=101,gid=101,mode=0755
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  dados_postgres_producao:
+  uploads_producao:
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE:?Defina POSTGRES_PASSWORD_FILE}
+  app_database_password:
+    file: ${APP_DB_PASSWORD_FILE:?Defina APP_DB_PASSWORD_FILE}
+  database_url:
+    file: ${DATABASE_URL_FILE:?Defina DATABASE_URL_FILE}
+  session_secret:
+    file: ${SESSION_SECRET_FILE:?Defina SESSION_SECRET_FILE}
