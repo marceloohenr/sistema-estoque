@@ -5216,7 +5216,26 @@ const productUnits = [
   'Par',
 ]
 
+const purchaseUnits = [
+  ...productUnits,
+  'Balde',
+  'Galonete',
+  'Garrafa',
+  'Lata',
+  'Tambor',
+  'Barril',
+  'Palete',
+  'Kit',
+  'Cartela',
+  'Sachê',
+  'Bisnaga',
+  'Granel',
+]
+
 function ProductMeasuresFields({ form, setForm }) {
+  const [customPurchaseUnit, setCustomPurchaseUnit] = useState(
+    () => Boolean(form.purchaseUnit) && !purchaseUnits.includes(form.purchaseUnit),
+  )
   const saleUnit = form.unit === '__outra__' ? form.unitCustom || '' : form.unit
   const factor = Number(form.unitsPerPurchase)
   const set = (key) => (event) => {
@@ -5242,6 +5261,15 @@ function ProductMeasuresFields({ form, setForm }) {
         ? { unitsPerPurchase: 1 }
         : {}),
     }))
+  }
+  function selectPurchaseUnit(event) {
+    if (event.target.value === '__outra__') {
+      setCustomPurchaseUnit(true)
+      setForm((current) => ({ ...current, purchaseUnit: '' }))
+      return
+    }
+    setCustomPurchaseUnit(false)
+    changePurchaseUnit(event)
   }
   return (
     <section className="product-measures-panel" aria-labelledby="product-measures-heading">
@@ -5293,22 +5321,33 @@ function ProductMeasuresFields({ form, setForm }) {
           <label className="field-label" htmlFor="purchase-unit">
             2. Como você compra? (embalagem ou medida)
           </label>
-          <input
+          <select
             id="purchase-unit"
             className="form-control"
-            list="purchase-unit-options"
-            value={form.purchaseUnit}
-            onChange={changePurchaseUnit}
-            placeholder="Ex.: fardo, caixa, unidade"
-            maxLength="30"
+            value={customPurchaseUnit ? '__outra__' : form.purchaseUnit}
+            onChange={selectPurchaseUnit}
             required
             aria-describedby="purchase-unit-help"
-          />
-          <datalist id="purchase-unit-options">
-            {productUnits.map((unit) => (
-              <option key={unit} value={unit} />
+          >
+            <option value="">Selecione a medida de compra</option>
+            {purchaseUnits.map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
             ))}
-          </datalist>
+            <option value="__outra__">Outra medida…</option>
+          </select>
+          {customPurchaseUnit && (
+            <input
+              className="form-control"
+              aria-label="Nome da medida de compra"
+              value={form.purchaseUnit}
+              onChange={changePurchaseUnit}
+              placeholder="Ex.: caixa com divisórias"
+              maxLength="30"
+              required
+            />
+          )}
           <small id="purchase-unit-help" className="field-hint">
             É a medida informada ao receber uma compra. O custo de entrada vale para uma embalagem
             inteira.

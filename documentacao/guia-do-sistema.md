@@ -88,7 +88,7 @@ Ações por produto:
 O cadastro reúne código, unidade de controle/venda, nome, categoria, fornecedor principal opcional, estoque mínimo, eventual saldo inicial, custo, preço de venda, imagem e unidades por medida de compra.
 
 - **Como você vende?** é a unidade usada no saldo e nas saídas: unidade, frasco, litro, quilo ou outra medida. O preço de venda vale para uma unidade dessa medida.
-- **Como você compra?** é a embalagem ou medida usada no recebimento: fardo, caixa, unidade etc. O custo de entrada vale para uma embalagem inteira.
+- **Como você compra?** é a embalagem ou medida usada no recebimento. A lista mostra unidade, pacote, caixa, fardo, balde, bombona, galão, tambor, palete, litro, quilograma e outras opções. Em **Outra medida…**, você pode escrever uma embalagem específica. Medidas personalizadas já cadastradas continuam disponíveis na edição. O custo de entrada vale para uma embalagem inteira.
 - **Quantas unidades de venda vêm na embalagem?** define a conversão. Se 1 fardo tem 12 frascos, receber 2 fardos acrescenta 24 frascos ao saldo. O formulário mostra esse exemplo com as medidas escolhidas. Se compra e venda usam a mesma medida, informe 1.
 - **Saldo inicial:** quantidade contada em embalagens de compra. Se for maior que zero, informe o custo por embalagem. Fornecedor e preço de venda continuam opcionais, mesmo com saldo inicial.
 - **Estoque mínimo:** limite individual do produto que dispara o alerta.
