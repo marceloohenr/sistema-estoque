@@ -1044,7 +1044,8 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.equal(fifoSale.status, 201)
   assert.equal(fifoSale.payload.fifoCost, 40)
   assert.equal(fifoSale.payload.margin, 35)
-  const fifoReport = await call(`/reports?period=7d&productId=${fifoProduct.payload.id}`, {
+  const fifoPeriod = 'period=custom&from=2026-10-01&to=2026-10-31'
+  const fifoReport = await call(`/reports?${fifoPeriod}&productId=${fifoProduct.payload.id}`, {
     cookie: admin.cookie,
   })
   assert.equal(fifoReport.status, 200)
@@ -1066,7 +1067,7 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.equal(fifoProductMargin.knownUnits, 1)
   assert.equal(Number(fifoProductMargin.forecastMargin), 10)
   const comparedFifoReport = await call(
-    `/reports?period=7d&productId=${fifoProduct.payload.id}&compare=previous`,
+    `/reports?${fifoPeriod}&productId=${fifoProduct.payload.id}&compare=previous`,
     { cookie: admin.cookie },
   )
   assert.equal(comparedFifoReport.status, 200)
@@ -1092,7 +1093,7 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   )
   assert.equal(Number(comparedFifoReport.payload.comparison.summary.realizedMargin), 0)
   const supplierFifoReport = await call(
-    `/reports?period=7d&productId=${fifoProduct.payload.id}&supplierId=${supplier.payload.id}`,
+    `/reports?${fifoPeriod}&productId=${fifoProduct.payload.id}&supplierId=${supplier.payload.id}`,
     { cookie: admin.cookie },
   )
   assert.equal(supplierFifoReport.payload.summary.unitsOut, 2)
@@ -1100,7 +1101,7 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.equal(Number(supplierFifoReport.payload.summary.outgoingCost), 20)
   assert.equal(Number(supplierFifoReport.payload.summary.realizedMargin), 30)
   const supplierFifoSale = await call(
-    `/reports/product/${fifoProduct.payload.id}/movements?period=7d&supplierId=${supplier.payload.id}`,
+    `/reports/product/${fifoProduct.payload.id}/movements?${fifoPeriod}&supplierId=${supplier.payload.id}`,
     { cookie: admin.cookie },
   )
   const supplierFifoSaleRow = supplierFifoSale.payload.movements.find((movement) =>
@@ -1109,14 +1110,14 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.equal(supplierFifoSaleRow.quantity, -2)
   assert.equal(Number(supplierFifoSaleRow.fifoCost), 20)
   const fifoDetailFirstPage = await call(
-    `/reports/product/${fifoProduct.payload.id}/movements?period=7d&page=1&limit=2`,
+    `/reports/product/${fifoProduct.payload.id}/movements?${fifoPeriod}&page=1&limit=2`,
     { cookie: admin.cookie },
   )
   assert.equal(fifoDetailFirstPage.status, 200)
   assert.equal(fifoDetailFirstPage.payload.total, 3)
   assert.equal(fifoDetailFirstPage.payload.movements.length, 2)
   const fifoDetailSecondPage = await call(
-    `/reports/product/${fifoProduct.payload.id}/movements?period=7d&page=2&limit=2`,
+    `/reports/product/${fifoProduct.payload.id}/movements?${fifoPeriod}&page=2&limit=2`,
     { cookie: admin.cookie },
   )
   assert.equal(fifoDetailSecondPage.payload.movements.length, 1)

@@ -421,6 +421,7 @@ async function recordLotMovement(
     unitSalePrice = null,
     occurredAt = new Date(),
     purchaseDetails = null,
+    openingBalance = false,
   },
 ) {
   const { rows } = await client.query(
@@ -456,7 +457,8 @@ async function recordLotMovement(
     )
   if (
     type === 'Entrada' &&
-    (!supplierId || unitCost == null || unitSalePrice == null || Number(unitSalePrice) <= 0)
+    (unitCost == null ||
+      (!openingBalance && (!supplierId || unitSalePrice == null || Number(unitSalePrice) <= 0)))
   )
     throw httpError(
       400,
@@ -480,7 +482,11 @@ async function recordLotMovement(
     if (!valid.rowCount) throw httpError(400, 'INVALID_SUPPLIER', 'Selecione um fornecedor ativo.')
   }
   const salePrice =
-    type === 'Entrada' || type === 'Sa\u00edda' ? Number(unitSalePrice ?? product.price) : null
+    type === 'Entrada' && openingBalance && unitSalePrice == null
+      ? null
+      : type === 'Entrada' || type === 'Sa\u00edda'
+        ? Number(unitSalePrice ?? product.price)
+        : null
   const { rows: created } = await client.query(
     `INSERT INTO movements (product_id,user_id,type,quantity,reason,supplier_id,unit_cost,unit_sale_price,occurred_at,purchase_quantity,purchase_unit,purchase_conversion,purchase_unit_cost)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
@@ -581,7 +587,7 @@ async function recordLotMovement(
     [productId],
   )
   await client.query(
-    `UPDATE products SET stock=$1,average_cost=$2,price=CASE WHEN $3='Entrada' THEN $4::numeric ELSE price END,updated_at=NOW() WHERE id=$5`,
+    `UPDATE products SET stock=$1,average_cost=$2,price=CASE WHEN $3='Entrada' THEN COALESCE($4::numeric,price) ELSE price END,updated_at=NOW() WHERE id=$5`,
     [newStock, newStock === 0 ? 0 : cost[0].average, type, salePrice, productId],
   )
   if (supplierId)
@@ -1067,9 +1073,9 @@ app.post('/api/products', requireAuth, requireAdmin, async (request, response) =
       'Use conversão 1 quando as medidas de compra e venda forem iguais.',
     )
   const minimum = integer(request.body?.minimum ?? 0, 'estoque mínimo')
-  const price = money(request.body?.price ?? 0)
+  const price = money(request.body?.price === '' ? 0 : (request.body?.price ?? 0))
   const entryCost = optionalMoney(request.body?.entryCost)
-  const entrySalePrice = optionalMoney(request.body?.price)
+  const entrySalePrice = Number(price) > 0 ? Number(price) : null
   const initialStock = integer(request.body?.initialStock ?? 0, 'saldo inicial')
 
   const product = await withTransaction(async (client) => {
@@ -1088,29 +1094,21 @@ app.post('/api/products', requireAuth, requireAdmin, async (request, response) =
         if (!supplier.rowCount)
           throw httpError(400, 'INVALID_SUPPLIER', 'Selecione um fornecedor ativo.')
       }
-      if (
-        initialStock > 0 &&
-        (!supplierId || entryCost == null || entrySalePrice == null || Number(entrySalePrice) <= 0)
-      )
+      if (initialStock > 0 && entryCost == null)
         throw httpError(
           400,
           'INITIAL_ENTRY_REQUIRED',
-          'Para informar saldo inicial, selecione o fornecedor e informe custo de compra e preço de venda.',
+          'Informe o custo do saldo inicial. Fornecedor e preço de venda podem ser preenchidos depois.',
         )
       if (
         initialStock > 0 &&
+        entrySalePrice != null &&
         Number(entrySalePrice) < Number((Number(entryCost) / unitsPerPurchase).toFixed(2))
       )
         throw httpError(
           409,
           'SALE_BELOW_COST',
           'O preço de venda não pode ficar abaixo do custo convertido por unidade de venda.',
-        )
-      if (entryCost != null && !supplierId)
-        throw httpError(
-          400,
-          'INVALID_SUPPLIER',
-          'Selecione o fornecedor relacionado ao custo informado.',
         )
       const { rows } = await client.query(
         `INSERT INTO products (code, name, category_id, supplier_id, unit, purchase_unit, units_per_purchase, minimum, price)
@@ -1131,6 +1129,7 @@ app.post('/api/products', requireAuth, requireAdmin, async (request, response) =
           type: 'Entrada',
           quantity: initialStock,
           reason: 'Saldo inicial',
+          openingBalance: true,
           supplierId,
           unitCost: Number(entryCost),
           unitSalePrice: entrySalePrice,
@@ -1263,6 +1262,12 @@ app.patch('/api/products/:id', requireAuth, requireAdmin, async (request, respon
         ],
       )
       if (!result.rowCount) throw httpError(404, 'PRODUCT_NOT_FOUND', 'Produto não encontrado.')
+      if (Number(price) > 0) {
+        await client.query(
+          'UPDATE inventory_lots SET unit_sale_price=$1 WHERE product_id=$2 AND quantity_remaining>0 AND unit_sale_price IS NULL',
+          [price, id],
+        )
+      }
       if (supplierId)
         await client.query(
           'INSERT INTO product_suppliers (product_id, supplier_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
@@ -2293,7 +2298,7 @@ app.get('/api/reports', requireAuth, requireAdmin, async (request, response) => 
          FROM inventory_lots l WHERE l.quantity_remaining>0 AND ($4::int IS NULL OR l.product_id=$4) AND ($5::int IS NULL OR l.supplier_id=$5)
          GROUP BY l.product_id
        )
-       SELECT p.id AS "productId",p.name,p.code,p.unit,p.active,COALESCE(pu.purchase_count,0)::int AS "purchaseCount",
+       SELECT p.id AS "productId",p.name,p.code,p.unit,p.active,p.price,COALESCE(pu.purchase_count,0)::int AS "purchaseCount",
               COALESCE(pu.units_purchased,0)::int AS "unitsPurchased",COALESCE(pu.purchase_cost,0) AS "purchaseCost",
               COALESCE(sa.sale_count,0)::int AS "saleCount",COALESCE(sa.units_sold,0)::int AS "unitsSold",
               COALESCE(sa.revenue,0) AS revenue,COALESCE(sa.fifo_cost,0) AS "fifoCost",
@@ -2307,14 +2312,30 @@ app.get('/api/reports', requireAuth, requireAdmin, async (request, response) => 
       [...args, exitType],
     ),
   ])
+  const margins = productMargins.rows.map((row) => {
+    const salePricePending =
+      Number(row.price) <= 0 && Number(row.knownUnits) + Number(row.pendingUnits) > 0
+    return {
+      ...row,
+      salePricePending,
+      forecastMargin: salePricePending ? null : row.forecastMargin,
+      forecastRevenue: salePricePending ? null : row.forecastRevenue,
+    }
+  })
+  const salePricePending = margins.some((row) => row.salePricePending)
   response.json({
     period,
     range,
     comparison,
     filters: { productId, supplierId, from: fromDate, to: toDate },
-    summary: summary[0],
+    summary: {
+      ...summary[0],
+      salePricePending,
+      forecastMargin: salePricePending ? null : summary[0].forecastMargin,
+      forecastRevenue: salePricePending ? null : summary[0].forecastRevenue,
+    },
     products: products.rows.map((row) => ({ ...row, price: Number(row.price) })),
-    productMargins: productMargins.rows,
+    productMargins: margins,
   })
 })
 

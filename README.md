@@ -36,7 +36,7 @@ docker compose start
 
 ## Rotinas do estoque
 
-Uma instalação nova começa sem produtos. Cadastre as categorias, os fornecedores e os itens do armazém. O saldo inicial gera uma entrada com fornecedor, quantidade, custo e preço de venda.
+Uma instalação nova começa sem produtos. Cadastre as categorias e os itens do armazém. Fornecedor e preço de venda são opcionais no cadastro do produto e podem ser definidos depois. Se houver saldo inicial, informe o custo por embalagem de compra; o sistema converte a quantidade para a unidade de venda. Uma saída exige preço de venda definido e respeita o custo FIFO.
 
 Use o [modelo de inventário](documentacao/modelo-inventario.csv) para organizar a contagem: uma linha por produto, com saldo e unidade. Inclua os demais dados somente depois de confirmá-los. A importação de CSV ainda não está disponível; cadastre os itens pela interface.
 

@@ -87,12 +87,12 @@ Ações por produto:
 
 O cadastro reúne código, unidade de controle/venda, nome, categoria, fornecedor principal opcional, estoque mínimo, eventual saldo inicial, custo, preço de venda, imagem e unidades por medida de compra.
 
-- **Unidade de controle/venda:** unidade usada no saldo e nas saídas (por exemplo, unidade, litro ou quilo).
-- **Medida de compra:** embalagem em que a compra é recebida (por exemplo, fardo ou caixa).
-- **Conversão:** quantas unidades de controle existem em cada medida de compra. Exemplo: 1 fardo × 12 unidades por fardo = 12 unidades adicionadas ao saldo.
-- **Saldo inicial:** quantidade contada ao começar a usar o sistema. Se for maior que zero, informe fornecedor, custo e preço de venda para registrar a entrada.
+- **Como você vende?** é a unidade usada no saldo e nas saídas: unidade, frasco, litro, quilo ou outra medida. O preço de venda vale para uma unidade dessa medida.
+- **Como você compra?** é a embalagem ou medida usada no recebimento: fardo, caixa, unidade etc. O custo de entrada vale para uma embalagem inteira.
+- **Quantas unidades de venda vêm na embalagem?** define a conversão. Se 1 fardo tem 12 frascos, receber 2 fardos acrescenta 24 frascos ao saldo. O formulário mostra esse exemplo com as medidas escolhidas. Se compra e venda usam a mesma medida, informe 1.
+- **Saldo inicial:** quantidade contada em embalagens de compra. Se for maior que zero, informe o custo por embalagem. Fornecedor e preço de venda continuam opcionais, mesmo com saldo inicial.
 - **Estoque mínimo:** limite individual do produto que dispara o alerta.
-- **Custo e preço de venda:** referências para o lote/saldo inicial, quando aplicáveis. Compras posteriores registram seus próprios valores, sem sobrescrever o histórico anterior.
+- **Custo e preço de venda:** o custo é obrigatório quando há saldo inicial. O preço de venda pode ser definido depois, pela edição do produto; enquanto isso, a lista mostra **Preço não informado**, as saídas ficam bloqueadas e a margem estimada aparece pendente. Compras posteriores registram seus próprios valores.
 - **Imagem:** JPEG, PNG ou WebP, até 5 MB.
 
 Na criação do produto também é possível abrir um cadastro rápido de categoria ou fornecedor; após salvar esse cadastro auxiliar, o formulário do produto continua aberto.
@@ -206,7 +206,7 @@ Para trocar sua senha, informe a senha atual, a nova senha e a confirmação. A 
 2. Cadastre os fornecedores, incluindo os contatos confirmados.
 3. Cadastre cada produto uma única vez, escolhendo unidades de compra e venda e o fator de conversão.
 4. Abra a ficha do fornecedor e vincule os produtos que ele vende. A ação **Fornecedores e preços**, no produto, permite comparar os valores.
-5. Informe o saldo inicial com fornecedor, custo e preço de venda. Se houver saldo antigo com custo pendente, regularize-o em **Relatórios → Informar custo** antes de registrar a venda.
+5. Se já houver saldo, informe a quantidade e o custo por embalagem de compra. Fornecedor e preço de venda podem ficar para depois. Defina o preço antes de vender. Se houver saldo antigo com custo pendente, regularize-o em **Relatórios → Informar custo**.
 
 ### Registrar uma compra e acompanhar seu resultado
 

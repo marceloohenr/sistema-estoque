@@ -1195,13 +1195,30 @@ function MovementTable({ movements, products }) {
 
 function ProductFifoPrice({ product, onEdit }) {
   const price = Number(product.price)
+  const pricePending = price <= 0
   const nextCost = product.nextFifoCost == null ? null : Number(product.nextFifoCost)
-  const belowNext = product.stock > 0 && nextCost != null && price < nextCost
+  const belowNext = !pricePending && product.stock > 0 && nextCost != null && price < nextCost
   const riskyUnits = Number(product.unitsBelowSaleCost) || 0
-  const hasRisk = belowNext || riskyUnits > 0
+  const hasRisk = !pricePending && (belowNext || riskyUnits > 0)
   return (
     <div className="product-fifo-price">
-      <strong>Venda: {money(price)}</strong>
+      <strong>Venda: {pricePending ? 'Preço não informado' : money(price)}</strong>
+      {pricePending && (
+        <div className="product-price-warning">
+          <AlertTriangle size={15} aria-hidden="true" />
+          <div>
+            <strong>Defina o preço antes de vender</strong>
+            <span>
+              O cadastro está salvo. As saídas ficam bloqueadas até informar o preço de venda.
+            </span>
+            {onEdit && (
+              <button type="button" className="text-button" onClick={onEdit}>
+                Informar preço de venda
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <span>
         Próxima unidade FIFO:{' '}
         {nextCost == null ? (product.stock > 0 ? 'custo pendente' : 'sem saldo') : money(nextCost)}
@@ -3637,7 +3654,9 @@ function Reports({ products, suppliers, onInformCost }) {
         ],
         [
           'Margem estimada do saldo',
-          report.summary.costPending ? 'Pendente' : decimal(report.summary.forecastMargin),
+          report.summary.costPending || report.summary.salePricePending
+            ? 'Pendente'
+            : decimal(report.summary.forecastMargin),
         ],
         [],
         ['Movimentações do período'],
@@ -3964,9 +3983,11 @@ function Reports({ products, suppliers, onInformCost }) {
               />
               <ReportStat
                 label="Venda estimada do saldo"
-                value={money(
-                  report.products.reduce((sum, item) => sum + item.stock * item.price, 0),
-                )}
+                value={
+                  summary.salePricePending
+                    ? 'Preço pendente'
+                    : money(report.products.reduce((sum, item) => sum + item.stock * item.price, 0))
+                }
                 helper="projeção ao preço de venda atual; não é receita realizada"
                 icon={FileBarChart}
                 color="blue"
@@ -4018,7 +4039,11 @@ function Reports({ products, suppliers, onInformCost }) {
               />
               <ReportStat
                 label="Margem estimada do saldo"
-                value={summary.costPending ? 'Pendente' : money(summary.forecastMargin)}
+                value={
+                  summary.costPending || summary.salePricePending
+                    ? 'Pendente'
+                    : money(summary.forecastMargin)
+                }
                 helper="Clique para detalhar unidades e projeção por produto"
                 icon={FileBarChart}
                 color="violet"
@@ -4094,7 +4119,7 @@ function Reports({ products, suppliers, onInformCost }) {
                         {item.stock} {item.unit.toLowerCase()}
                       </td>
                       <td>{item.minimum}</td>
-                      <td>{money(item.price)}</td>
+                      <td>{Number(item.price) > 0 ? money(item.price) : 'Preço não informado'}</td>
                       <td>
                         <strong>
                           {item.costPending
@@ -4530,7 +4555,11 @@ function MarginReportModal({
               <article>
                 <span>{realized ? 'Lucro já realizado' : 'Margem estimada'}</span>
                 <strong className={margin < 0 ? 'quantity-negative' : ''}>
-                  {!realized && summary.costPending ? 'Há custo pendente' : money(margin)}
+                  {!realized && summary.salePricePending
+                    ? 'Há preço de venda pendente'
+                    : !realized && summary.costPending
+                      ? 'Há custo pendente'
+                      : money(margin)}
                 </strong>
                 <small>
                   {realized
@@ -4638,9 +4667,17 @@ function MarginReportModal({
                               )}
                             </td>
                             <td>{money(item.remainingCost)}</td>
-                            <td>{money(item.forecastRevenue)}</td>
                             <td>
-                              {item.costPending ? (
+                              {item.salePricePending
+                                ? 'Preço não informado'
+                                : money(item.forecastRevenue)}
+                            </td>
+                            <td>
+                              {item.salePricePending ? (
+                                <span className="report-pending-value">
+                                  Defina o preço de venda
+                                </span>
+                              ) : item.costPending ? (
                                 <span className="report-pending-value">
                                   Parcial · custo pendente
                                 </span>
@@ -5179,6 +5216,135 @@ const productUnits = [
   'Par',
 ]
 
+function ProductMeasuresFields({ form, setForm }) {
+  const saleUnit = form.unit === '__outra__' ? form.unitCustom || '' : form.unit
+  const factor = Number(form.unitsPerPurchase)
+  const set = (key) => (event) => {
+    const value = event.target.value
+    setForm((current) => ({ ...current, [key]: value }))
+  }
+  function changeSaleUnit(event) {
+    const value = event.target.value
+    setForm((current) => ({
+      ...current,
+      unit: value,
+      ...(current.purchaseUnit === current.unit && value !== '__outra__'
+        ? { purchaseUnit: value, unitsPerPurchase: 1 }
+        : {}),
+    }))
+  }
+  function changePurchaseUnit(event) {
+    const value = event.target.value
+    setForm((current) => ({
+      ...current,
+      purchaseUnit: value,
+      ...(value === (current.unit === '__outra__' ? current.unitCustom : current.unit)
+        ? { unitsPerPurchase: 1 }
+        : {}),
+    }))
+  }
+  return (
+    <section className="product-measures-panel" aria-labelledby="product-measures-heading">
+      <div>
+        <h3 id="product-measures-heading">Como este produto é comprado e vendido?</h3>
+        <p>Exemplo: você compra um fardo com 12 frascos e vende cada frasco separadamente.</p>
+      </div>
+      <div className="form-grid">
+        <div className="field-group">
+          <label className="field-label" htmlFor="product-unit">
+            1. Como você vende? (unidade de venda)
+          </label>
+          <select
+            id="product-unit"
+            className="form-control"
+            value={form.unit}
+            onChange={changeSaleUnit}
+            required
+            aria-describedby="sale-unit-help"
+          >
+            <option value="">Selecione</option>
+            {productUnits.map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
+            ))}
+            {!productUnits.includes(form.unit) && form.unit !== '__outra__' && (
+              <option value={form.unit}>{form.unit}</option>
+            )}
+            <option value="__outra__">Outra unidade…</option>
+          </select>
+          {form.unit === '__outra__' && (
+            <input
+              className="form-control"
+              aria-label="Nome da unidade de venda"
+              placeholder="Ex.: frasco, balde, bombona"
+              maxLength="30"
+              value={form.unitCustom ?? ''}
+              onChange={set('unitCustom')}
+              required
+            />
+          )}
+          <small id="sale-unit-help" className="field-hint">
+            É a medida usada no saldo, nas saídas e no estoque mínimo. O preço de venda vale para
+            uma dessas unidades.
+          </small>
+        </div>
+        <div className="field-group">
+          <label className="field-label" htmlFor="purchase-unit">
+            2. Como você compra? (embalagem ou medida)
+          </label>
+          <input
+            id="purchase-unit"
+            className="form-control"
+            list="purchase-unit-options"
+            value={form.purchaseUnit}
+            onChange={changePurchaseUnit}
+            placeholder="Ex.: fardo, caixa, unidade"
+            maxLength="30"
+            required
+            aria-describedby="purchase-unit-help"
+          />
+          <datalist id="purchase-unit-options">
+            {productUnits.map((unit) => (
+              <option key={unit} value={unit} />
+            ))}
+          </datalist>
+          <small id="purchase-unit-help" className="field-hint">
+            É a medida informada ao receber uma compra. O custo de entrada vale para uma embalagem
+            inteira.
+          </small>
+        </div>
+      </div>
+      <NumberField
+        label={`3. Quantas unidades de venda vêm em 1 ${form.purchaseUnit || 'embalagem de compra'}?`}
+        value={form.unitsPerPurchase}
+        onChange={set('unitsPerPurchase')}
+        min="1"
+        step="1"
+        required
+      />
+      <div className="product-measures-example" role="status" aria-live="polite">
+        {saleUnit && form.purchaseUnit && Number.isSafeInteger(factor) && factor > 0 ? (
+          <>
+            <strong>
+              1 {form.purchaseUnit} = {factor} × {saleUnit}
+            </strong>
+            <span>
+              Ao receber 2 {form.purchaseUnit}, entram {2 * factor} {saleUnit} no saldo. Na venda, a
+              quantidade é informada em {saleUnit}.
+            </span>
+          </>
+        ) : (
+          <span>
+            Escolha as duas medidas e informe o conteúdo da embalagem para conferir a conversão.
+          </span>
+        )}
+        <small>Se você compra e vende na mesma medida, use 1.</small>
+      </div>
+    </section>
+  )
+}
+
 function EntityModal({ modal, data, onClose, onSubmit, onQuickCreate, busy }) {
   const { kind, item } = modal
   const movementProducts = Array.isArray(modal.allowedProductIds)
@@ -5282,19 +5448,16 @@ function EntityModal({ modal, data, onClose, onSubmit, onQuickCreate, busy }) {
       if (phoneDigits && phoneDigits.length !== 10 && phoneDigits.length !== 11)
         return setError('Informe o telefone com DDD: 10 dígitos para fixo ou 11 para celular.')
     }
-    if (
-      kind === 'product' &&
-      !item &&
-      Number(form.initialStock) > 0 &&
-      (!form.supplierId || form.entryCost === '' || form.price === '')
-    )
+    if (kind === 'product' && !item && Number(form.initialStock) > 0 && form.entryCost === '')
       return setError(
-        'Para cadastrar o saldo inicial, informe o fornecedor, o custo de entrada e o preço de venda.',
+        'Informe o custo do saldo inicial. Fornecedor e preço de venda são opcionais.',
       )
     if (
       kind === 'product' &&
       !item &&
       Number(form.initialStock) > 0 &&
+      form.price !== '' &&
+      Number(form.price) > 0 &&
       Number(form.price) <
         Number((Number(form.entryCost) / Number(form.unitsPerPurchase || 1)).toFixed(2))
     )
@@ -5328,7 +5491,7 @@ function EntityModal({ modal, data, onClose, onSubmit, onQuickCreate, busy }) {
         categoryId: Number(form.categoryId),
         supplierId: form.supplierId ? Number(form.supplierId) : null,
         minimum: Number(form.minimum),
-        price: Number(form.price || 0),
+        price: form.price === '' ? null : Number(form.price),
         entryCost: form.entryCost === '' ? null : Number(form.entryCost),
       }
       if (!item) payload.initialStock = Number(form.initialStock)
@@ -5386,55 +5549,9 @@ function EntityModal({ modal, data, onClose, onSubmit, onQuickCreate, busy }) {
         <form onSubmit={submit}>
           {kind === 'product' && (
             <>
-              <div className="form-grid">
-                <Field label="Código" value={form.code} onChange={set('code')} required />
-                <div className="field-group">
-                  <label className="field-label" htmlFor="product-unit">
-                    Unidade de controle
-                  </label>
-                  <select
-                    id="product-unit"
-                    aria-label="Unidade do produto"
-                    className="form-control"
-                    value={productUnits.includes(form.unit) ? form.unit : '__outra__'}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        unit: event.target.value === '__outra__' ? '__outra__' : event.target.value,
-                      }))
-                    }
-                    required
-                  >
-                    <option value="">Selecione a unidade</option>
-                    {productUnits.map((unit) => (
-                      <option key={unit} value={unit}>
-                        {unit}
-                      </option>
-                    ))}
-                    <option value="__outra__">Outra unidade…</option>
-                  </select>
-                  {form.unit === '__outra__' && (
-                    <input
-                      className="form-control unit-custom-input"
-                      aria-label="Nome da unidade personalizada"
-                      maxLength="30"
-                      placeholder="Ex.: balde, bombona retornável"
-                      value={form.unitCustom ?? ''}
-                      onChange={set('unitCustom')}
-                      required
-                    />
-                  )}
-                  {!productUnits.includes(form.unit) && form.unit !== '__outra__' && (
-                    <small className="field-hint">
-                      Unidade atual: {form.unit}. Selecione outra para alterá-la.
-                    </small>
-                  )}
-                  <small className="field-hint">
-                    A quantidade e os alertas serão registrados nesta unidade.
-                  </small>
-                </div>
-              </div>
+              <Field label="Código" value={form.code} onChange={set('code')} required />
               <Field label="Nome do produto" value={form.name} onChange={set('name')} required />
+              <ProductMeasuresFields form={form} setForm={setForm} />
               <div className="form-grid">
                 <div className="field-group">
                   <div className="field-label-row">
@@ -5469,7 +5586,7 @@ function EntityModal({ modal, data, onClose, onSubmit, onQuickCreate, busy }) {
                 <div className="field-group">
                   <div className="field-label-row">
                     <label className="field-label" htmlFor="product-supplier">
-                      Fornecedor principal
+                      Fornecedor principal (opcional)
                     </label>
                     {!item && (
                       <button
@@ -5509,7 +5626,7 @@ function EntityModal({ modal, data, onClose, onSubmit, onQuickCreate, busy }) {
                 </div>
                 {!item && (
                   <NumberField
-                    label="Saldo inicial"
+                    label={`Saldo inicial em ${form.purchaseUnit?.toLowerCase() || 'embalagens de compra'}`}
                     value={form.initialStock}
                     onChange={set('initialStock')}
                   />
@@ -5517,13 +5634,14 @@ function EntityModal({ modal, data, onClose, onSubmit, onQuickCreate, busy }) {
               </div>
               <div className="form-grid product-numbers-grid">
                 <NumberField
-                  label="Custo de entrada (R$)"
+                  label={`Custo por ${form.purchaseUnit?.toLowerCase() || 'embalagem de compra'} (R$)`}
                   value={form.entryCost}
                   onChange={set('entryCost')}
                   step="0.01"
                 />
                 <NumberField
-                  label="Preço de venda (R$)"
+                  label={`Preço por ${form.unit === '__outra__' ? form.unitCustom || 'unidade de venda' : form.unit.toLowerCase()} (R$) · opcional`}
+                  placeholder="Definir depois"
                   value={form.price}
                   onChange={set('price')}
                   step="0.01"
@@ -5531,8 +5649,9 @@ function EntityModal({ modal, data, onClose, onSubmit, onQuickCreate, busy }) {
               </div>
               {!item && (
                 <p className="field-hint">
-                  O custo e o preço de venda serão registrados no histórico quando houver saldo
-                  inicial maior que zero. Ambos são opcionais.
+                  Você pode definir fornecedor e preço de venda depois. Se informar saldo inicial,
+                  preencha o custo por embalagem de compra. A venda só será liberada quando houver
+                  um preço definido.
                 </p>
               )}
               <ImageUploadField
@@ -5542,41 +5661,6 @@ function EntityModal({ modal, data, onClose, onSubmit, onQuickCreate, busy }) {
                 label="Imagem do produto"
               />
             </>
-          )}
-          {kind === 'product' && (
-            <div className="form-grid product-measure-grid">
-              <div className="field-group">
-                <label className="field-label" htmlFor="purchase-unit">
-                  Medida de compra
-                </label>
-                <input
-                  id="purchase-unit"
-                  className="form-control"
-                  list="purchase-unit-options"
-                  value={form.purchaseUnit}
-                  onChange={set('purchaseUnit')}
-                  placeholder="Ex.: fardo"
-                  required
-                />
-                <datalist id="purchase-unit-options">
-                  {productUnits.map((unit) => (
-                    <option key={unit} value={unit} />
-                  ))}
-                </datalist>
-              </div>
-              <NumberField
-                label={`Quantas ${form.unit || 'unidades de venda'} vêm em cada ${form.purchaseUnit || 'medida de compra'}?`}
-                value={form.unitsPerPurchase}
-                onChange={set('unitsPerPurchase')}
-                min="1"
-                step="1"
-                required
-              />
-              <p className="field-hint measure-conversion-hint">
-                A medida escolhida acima no campo Unidade de controle será a medida de venda e a
-                unidade usada no saldo.
-              </p>
-            </div>
           )}
           {kind === 'product' && item?.costPending && (
             <p className="field-hint">
@@ -6240,7 +6324,7 @@ function initialForm(kind, item, data, presetProductId, presetSupplierId, allowe
           purchaseUnit: item.purchaseUnit ?? item.unit,
           unitsPerPurchase: item.unitsPerPurchase ?? 1,
           minimum: item.minimum,
-          price: item.price,
+          price: Number(item.price) > 0 ? item.price : '',
           entryCost: '',
           imageFile: null,
         }
