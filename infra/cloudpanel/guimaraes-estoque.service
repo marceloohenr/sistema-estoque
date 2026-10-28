@@ -1,0 +1,27 @@
+[Unit]
+Description=Guimaraes Produtos - API de estoque
+After=network.target postgresql@16-main.service
+Requires=postgresql@16-main.service
+
+[Service]
+Type=simple
+User=guimaraes
+Group=guimaraes
+WorkingDirectory=/home/guimaraes/apps/estoque/current/backend
+EnvironmentFile=/home/guimaraes/apps/estoque/shared/production.env
+Environment=PATH=/opt/guimaraes-node24/bin:/usr/bin:/bin
+Environment=NODE_OPTIONS=--max-old-space-size=192
+ExecStart=/opt/guimaraes-node24/bin/node src/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/guimaraes/apps/estoque/shared/uploads
+UMask=0027
+MemoryMax=320M
+SyslogIdentifier=guimaraes-estoque
+
+[Install]
+WantedBy=multi-user.target

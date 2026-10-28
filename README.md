@@ -1,14 +1,18 @@
-# Sistema de Gestão de Estoque
+# Guimarães Produtos — Gestão de estoque
 
-Aplicação de estoque para um armazém de produtos de limpeza. A interface foi construída com React e Vite; a API usa Node.js, Express e PostgreSQL. Os cadastros e as movimentações ficam no banco de dados.
+Sistema usado para cadastrar os produtos do armazém, registrar compras e saídas e acompanhar os preços dos fornecedores. O front-end usa React e Vite; a API é feita com Node.js e Express, e os dados ficam no PostgreSQL.
+
+O site está em **https://guimaraesprodutos.online**. Consulte o [guia de uso](documentacao/guia-do-sistema.md) para as rotinas de estoque e o [guia da VPS](documentacao/publicacao-vps.md) para acesso, portas, logs e backups.
+
+Os [requisitos](documentacao/requisitos.md) têm uma versão editável em Markdown e uma [cópia em PDF](documentacao/pdf/Documento-de-Requisitos-SaaS-Gestao-de-Estoque.pdf). A modelagem inicial está em [Diagramas UML](documentacao/uml/diagrama-uml.md).
 
 ## Ambiente local
 
-Pré-requisitos: Windows com virtualização habilitada no BIOS/UEFI, Docker Desktop com o engine Linux em execução e Docker Compose v2.
+No Windows, é preciso ter Docker Desktop com o engine Linux em execução, virtualização habilitada e Docker Compose v2.
 
 Na primeira configuração, copie `.env.example` para `.env`, gere um segredo para `SESSION_SECRET` e preencha as variáveis `SEED_*` das contas iniciais. Use `SEED_USERS=true` somente para essa criação; depois, desative a opção e remova as senhas iniciais do arquivo. O `.env` é ignorado pelo Git, e o exemplo não contém credenciais de acesso.
 
-Entre com os nomes de usuário `admin` ou `operador` e as senhas definidas na configuração. O e-mail fica cadastrado como contato, mas não é usado no login. Em contas antigas, o nome de usuário pode ter sido criado a partir da parte do e-mail anterior ao `@`. Cada novo usuário precisa de um nome exclusivo. A senha pode ser trocada a qualquer momento em **Configurações**; a nova senha deve ter pelo menos 12 caracteres.
+O login usa nome de usuário e senha. Os nomes iniciais do exemplo são `admin` e `operador`; as senhas são definidas na configuração. Cada conta precisa de um nome de usuário exclusivo. O e-mail serve como contato. A senha pode ser trocada em **Configurações**, com pelo menos 12 caracteres.
 
 ```powershell
 cd E:\Repositorios\sistema-estoque
@@ -30,17 +34,15 @@ docker compose start
 
 `docker compose down` remove os containers, mas mantém os volumes `dados_postgres` e `uploads_desenvolvimento`. Não use `docker compose down --volumes` se quiser preservar os dados locais.
 
-## Dados e funcionalidades
+## Rotinas do estoque
 
-Para entender cada tela, indicador, gráfico e fluxo de trabalho, consulte o [Guia detalhado do sistema](documentacao/guia-do-sistema.md).
-
-O banco não vem preenchido com produtos de exemplo. Cadastre as categorias, os fornecedores e os itens confirmados com o armazém. Quando informar o saldo inicial de um produto, o sistema registra uma entrada para manter o histórico completo.
+Uma instalação nova começa sem produtos. Cadastre as categorias, os fornecedores e os itens do armazém. O saldo inicial gera uma entrada com fornecedor, quantidade, custo e preço de venda.
 
 Use o [modelo de inventário](documentacao/modelo-inventario.csv) para organizar a contagem: uma linha por produto, com saldo e unidade. Inclua os demais dados somente depois de confirmá-los. A importação de CSV ainda não está disponível; cadastre os itens pela interface.
 
 - Administrador: dashboard, produtos, categorias, fornecedores, equipe e permissões, relatórios exportáveis em CSV, auditoria e configurações de conta.
 - Operador de estoque: dashboard, consulta de estoque, entradas, saídas, ajustes e alertas de estoque baixo.
-- O administrador pode cadastrar imagens JPEG, PNG ou WebP de produtos e fornecedores (até 5 MB). Os arquivos ficam em volume persistente, separados do banco de dados.
+- O administrador pode incluir fotos JPEG, PNG ou WebP de produtos e fornecedores, até 5 MB. As imagens ficam em uma pasta persistente; o banco guarda a referência do arquivo.
 - Em Fornecedores, os atalhos de WhatsApp e e-mail abrem uma mensagem preenchida para revisão; o sistema não envia a mensagem. No detalhe do fornecedor, é possível registrar preços recebidos por produto e consultar o histórico. Cotações não alteram o estoque nem o preço usado nos relatórios.
 - As operações de estoque são validadas no servidor, atualizadas em transação e não permitem saldo negativo.
 - Produtos, categorias, fornecedores e usuários são inativados em vez de apagados fisicamente; movimentos e auditoria são mantidos.
@@ -61,7 +63,7 @@ As rotas exigem sessão autenticada, exceto login, logout e saúde. Ações admi
 | Auditoria | `GET /api/audit` | Administrador |
 | Saúde | `GET /api/health` | Pública |
 
-As tabelas são criadas de forma idempotente na inicialização do backend. O seed opcional `SEED_USERS=true` só cria as contas configuradas e não redefine senhas existentes. Em uma instalação de produção, mantenha-o desativado e crie o primeiro administrador com `npm run bootstrap-admin`, usando variáveis de ambiente fornecidas pelo gerenciador de segredos.
+O backend prepara as tabelas na inicialização, sem recriar as que já existem. `SEED_USERS=true` cria somente as contas configuradas e preserva senhas existentes. Em produção, mantenha essa opção desativada e use `npm run bootstrap-admin` apenas quando precisar criar o primeiro administrador.
 
 ## Testes de integração
 
@@ -75,9 +77,15 @@ docker compose exec banco dropdb -U estoque_dev --force sistema_estoque_test
 
 O teste cobre login por nome de usuário, unicidade do usuário, acesso normal no primeiro acesso, troca voluntária de senha, cookies/sessão, proteção de origem, perfis, cadastros, movimentos, saldo, relatório, auditoria e inativação.
 
-## Preparação para produção e limites atuais
+## Produção na VPS
 
-O Compose padrão é de desenvolvimento. Para produção há um Compose separado com front-end estático servido por Nginx, backend sem porta pública, PostgreSQL sem porta publicada, volume persistente, verificações de saúde e segredos montados como arquivos. Nginx e backend executam sem root, com sistema de arquivos somente leitura e capacidades removidas; áreas temporárias ficam em `tmpfs`. Ele ainda precisa de um servidor e de um proxy reverso externo que termine HTTPS.
+A publicação usa os serviços nativos da VPS: Nginx do CloudPanel, Node 24 e PostgreSQL. A API atende em `127.0.0.1:3187`, e o Nginx recebe o tráfego HTTPS do domínio. Somente os usuários foram levados da base local; os cadastros comerciais e o estoque começaram vazios. O backup diário inclui banco e imagens.
+
+Os comandos de manutenção e recuperação estão em [Publicação na VPS](documentacao/publicacao-vps.md).
+
+## Alternativa de produção com Docker
+
+`compose.production.yaml` atende ambientes que usam Docker. Ele serve o front-end com Nginx, mantém API e banco sem portas públicas e usa volumes para os dados. Os segredos são montados como arquivos. O Nginx e o backend rodam sem root, com sistema de arquivos somente leitura e áreas temporárias em `tmpfs`. O HTTPS fica a cargo de um proxy externo.
 
 As imagens enviadas pelo administrador são gravadas no volume `uploads_producao`, montado somente no backend. Inclua esse volume no processo de backup junto com o banco para preservar as fotos.
 
@@ -106,8 +114,10 @@ docker compose --env-file .env.production -f compose.production.yaml run --rm `
   backend npm run bootstrap-admin
 ```
 
-Troque o nome, usuário e e-mail de exemplo pelos dados do responsável. A senha não é digitada na linha de comando; ela é lida do arquivo montado somente para leitura. O comando cria uma única conta e falha se o usuário ou e-mail já existir. Não reutilize as contas locais de desenvolvimento em produção. Faça backup do volume do banco e teste a restauração antes de receber dados importantes.
+Preencha nome, usuário e e-mail com os dados do responsável. A senha é lida do arquivo montado somente para leitura. O comando cria uma conta e falha se o usuário ou e-mail já existir. Na VPS atual, os usuários já foram importados; não é necessário executar esse comando.
 
-As imagens-base de Node.js, Nginx e PostgreSQL estão fixadas por digest nos arquivos de build e Compose. Antes de publicar, configure o proxy e os certificados TLS, estabeleça um processo regular de revisão e atualização desses digests, monitore os serviços e revise limites de rede e armazenamento. Não reutilize as credenciais locais.
+As imagens de Node.js, Nginx e PostgreSQL estão fixadas por digest. Revise as versões e as atualizações de segurança antes de trocar as imagens de produção.
 
-Esta versão ainda não faz importação dos dados reais do armazém, recuperação de senha por e-mail, autenticação multifator, segregação multiempresa nem configuração de hospedagem/HTTPS. Essas decisões dependem dos dados e do ambiente de produção escolhidos. O cadastro manual inicial usa apenas informações confirmadas pela empresa; não há produtos fictícios na base.
+## Limitações atuais
+
+A importação de planilhas, a recuperação de senha por e-mail, a autenticação em duas etapas e o uso por várias empresas ainda não estão disponíveis. As pendências técnicas estão registradas em [Revisão técnica do estoque](documentacao/avaliacao-do-sistema.md).

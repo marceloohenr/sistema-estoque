@@ -214,14 +214,44 @@ export async function migrate(database) {
       `)
     }
 
-    const knownUsernames = new Set((await client.query(
-      'SELECT LOWER(username) AS username FROM users WHERE username IS NOT NULL',
-    )).rows.map((row) => row.username))
+    // Registros antigos usavam 09h em Fortaleza. Recupera a hora de criação
+    // sem alterar o dia escolhido para a movimentação.
+    const movementTimeMigration = await client.query(
+      "SELECT 1 FROM app_migrations WHERE name='fix_movement_local_time'",
+    )
+    if (!movementTimeMigration.rowCount) {
+      await client.query(`
+        WITH affected AS (
+          UPDATE movements m
+          SET occurred_at = (
+            (m.occurred_at AT TIME ZONE 'America/Fortaleza')::date
+            + (m.created_at AT TIME ZONE 'America/Fortaleza')::time
+          ) AT TIME ZONE 'America/Fortaleza'
+          WHERE (m.occurred_at AT TIME ZONE 'UTC')::time = TIME '12:00:00'
+          RETURNING m.id, m.occurred_at
+        )
+        UPDATE inventory_lots l SET occurred_at = a.occurred_at
+        FROM affected a WHERE l.movement_id = a.id;
+        INSERT INTO app_migrations (name) VALUES ('fix_movement_local_time');
+      `)
+    }
+
+    const knownUsernames = new Set(
+      (
+        await client.query(
+          'SELECT LOWER(username) AS username FROM users WHERE username IS NOT NULL',
+        )
+      ).rows.map((row) => row.username),
+    )
     const { rows: usersToMigrate } = await client.query(
       'SELECT id, email FROM users WHERE username IS NULL ORDER BY id',
     )
     for (const user of usersToMigrate) {
-      const localPart = user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 50)
+      const localPart = user.email
+        .split('@')[0]
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]/g, '')
+        .slice(0, 50)
       const base = localPart.length >= 3 ? localPart : `usuario-${user.id}`
       let username = base
       let attempt = 0
@@ -234,7 +264,9 @@ export async function migrate(database) {
       knownUsernames.add(username.toLowerCase())
     }
     await client.query('ALTER TABLE users ALTER COLUMN username SET NOT NULL')
-    await client.query('CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx ON users (LOWER(username))')
+    await client.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx ON users (LOWER(username))',
+    )
     await client.query('COMMIT')
   } catch (error) {
     await client.query('ROLLBACK')
@@ -268,19 +300,29 @@ async function seedUsers(database) {
 
   for (const account of accounts) {
     if (!account.name || !account.email || !account.password) {
-      throw new Error(`As variáveis de inicialização da conta ${account.role} são obrigatórias quando SEED_USERS=true.`)
+      throw new Error(
+        `As variáveis de inicialização da conta ${account.role} são obrigatórias quando SEED_USERS=true.`,
+      )
     }
 
     const username = (account.username || account.email.split('@')[0]).trim().toLowerCase()
     if (!/^[a-z0-9._-]{3,50}$/.test(username)) {
-      throw new Error(`Defina um usuário válido para a conta ${account.role} (3 a 50 letras, números, pontos, hífens ou sublinhados).`)
+      throw new Error(
+        `Defina um usuário válido para a conta ${account.role} (3 a 50 letras, números, pontos, hífens ou sublinhados).`,
+      )
     }
 
     await database.query(
       `INSERT INTO users (name, username, email, password_hash, role, must_change_password)
        VALUES ($1, $2, LOWER($3), $4, $5, FALSE)
        ON CONFLICT DO NOTHING`,
-      [account.name.trim(), username, account.email.trim(), await hashPassword(account.password), account.role],
+      [
+        account.name.trim(),
+        username,
+        account.email.trim(),
+        await hashPassword(account.password),
+        account.role,
+      ],
     )
   }
 }

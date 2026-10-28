@@ -1,10 +1,10 @@
-# Guia do sistema de gestão de estoque
+# Como usar o estoque da Guimarães Produtos
 
-Este guia explica as telas, os indicadores e os fluxos disponíveis no sistema. A aplicação foi feita para registrar os produtos e as operações do armazém, consultar o saldo e acompanhar compras, fornecedores e resultados.
+Use este guia para cadastrar o catálogo, lançar compras e saídas e conferir o resultado das vendas. O sistema está em [guimaraesprodutos.online](https://guimaraesprodutos.online).
 
 ## Onde ver o lucro das vendas realizadas
 
-O indicador que representa o resultado de vendas já registradas é **Margem realizada**, na tela **Relatórios**. O gráfico **Valores do período** também mostra a margem realizada junto com compras, custo das saídas e receita.
+Em **Relatórios**, o cartão **Margem realizada** mostra quanto sobrou das vendas depois de descontar o custo dos produtos vendidos. O gráfico **Valores do período** reúne esse resultado, as compras, o custo das saídas e a receita.
 
 O cálculo usado é:
 
@@ -41,7 +41,7 @@ Pode consultar a visão geral e o estoque, criar e editar produtos, categorias e
 
 Pode consultar o estoque, registrar entradas, saídas e ajustes, acompanhar alertas de estoque baixo e alterar a própria senha. Não administra cadastros de categorias, fornecedores ou usuários, nem acessa relatórios administrativos e auditoria.
 
-As permissões são verificadas também pela API; esconder um item do menu não é a única barreira de acesso.
+As ações disponíveis no menu acompanham o perfil de cada conta.
 
 ## Telas e funções
 
@@ -73,15 +73,15 @@ O administrador usa **Produtos** para cadastrar e manter o catálogo. O operador
 - **Categoria:** agrupamento do produto.
 - **Fornecedor:** fornecedor principal, se definido. Um produto também pode ser fornecido por outras empresas; consulte a ação de fornecedores e preços.
 - **Saldo:** quantidade disponível na unidade de controle/venda cadastrada para o produto.
-- **Custo FIFO seguinte:** custo unitário do lote que será consumido a seguir, quando conhecido. Não é necessariamente uma média dos custos de todos os lotes.
-- **Mínimo e status:** o limite configurado e se o saldo está baixo.
+- **Preço de venda e custo FIFO:** mostra o preço atual e o custo unitário do lote que será consumido a seguir. Quando o preço fica abaixo desse custo, aparece um alerta com a perda por unidade e o atalho **Revisar preço de venda** para o administrador. O sistema também avisa quando há unidades de outros lotes mais caros que o preço atual. O maior custo do saldo ajuda a revisar o preço; a validação da saída usa os lotes FIFO e a quantidade efetivamente retirada. Custos pendentes ficam sinalizados. Esses valores consideram o custo da mercadoria, sem taxas, impostos ou outras despesas.
+- **Mínimo e status:** limite de reposição e situação do produto: em estoque, estoque baixo ou inativo.
 
 Ações por produto:
 
 - **Histórico:** consulta entradas, fornecedor, quantidade recebida e restante do lote, custo unitário, preço de venda e total da compra. Lotes e saídas seguem FIFO; custo não informado aparece pendente.
 - **Fornecedores e preços** (administrador): compara a última compra real e a última cotação de cada fornecedor vinculado, destacando separadamente o menor custo de compra e a menor cotação. Mostra também históricos separados. Cotação não é compra e não movimenta saldo.
 - **Movimentação:** abre uma operação já com o produto selecionado.
-- **Editar / Inativar** (administrador): altera dados do cadastro ou inativa o produto sem apagar o histórico. O sistema impede inativação se houver saldo incompatível com a regra do cadastro.
+- **Editar / Inativar** (administrador): altera o cadastro ou inativa o produto sem apagar o histórico. Para inativar, o saldo precisa estar zerado.
 
 #### Cadastro do produto
 
@@ -90,7 +90,7 @@ O cadastro reúne código, unidade de controle/venda, nome, categoria, fornecedo
 - **Unidade de controle/venda:** unidade usada no saldo e nas saídas (por exemplo, unidade, litro ou quilo).
 - **Medida de compra:** embalagem em que a compra é recebida (por exemplo, fardo ou caixa).
 - **Conversão:** quantas unidades de controle existem em cada medida de compra. Exemplo: 1 fardo × 12 unidades por fardo = 12 unidades adicionadas ao saldo.
-- **Saldo inicial:** quantidade contada na implantação. Quando informada, deve ser acompanhada dos dados necessários para registrar a entrada inicial corretamente.
+- **Saldo inicial:** quantidade contada ao começar a usar o sistema. Se for maior que zero, informe fornecedor, custo e preço de venda para registrar a entrada.
 - **Estoque mínimo:** limite individual do produto que dispara o alerta.
 - **Custo e preço de venda:** referências para o lote/saldo inicial, quando aplicáveis. Compras posteriores registram seus próprios valores, sem sobrescrever o histórico anterior.
 - **Imagem:** JPEG, PNG ou WebP, até 5 MB.
@@ -128,7 +128,7 @@ O cadastro de usuário requer nome, usuário exclusivo, e-mail, perfil e senha i
 
 ### 7. Movimentações
 
-O histórico lista data, produto, tipo, quantidade, custo FIFO/margem quando aplicável, responsável e observação. A busca pode filtrar produto, responsável ou motivo.
+O histórico mostra o que entrou, saiu ou foi ajustado, com data, produto, quantidade, responsável e observação. As saídas mostram também custo FIFO e margem. Há busca e filtros por produto, fornecedor, tipo e datas.
 
 O botão **Nova movimentação** abre um único formulário com três tipos:
 
@@ -140,7 +140,7 @@ Antes de salvar, a conferência mostra o saldo após entrada, total da compra e 
 
 #### Saída / venda
 
-Registra a saída com produto, quantidade e data. O preço aplicado vem do preço de venda atual do cadastro do produto; esta tela não tem um campo para definir um preço diferente para cada saída. O sistema usa FIFO (*First In, First Out*, “primeiro que entra, primeiro que sai”): consome primeiro o lote mais antigo, calcula o custo das unidades e associa a saída à receita registrada. Por exemplo, se ainda houver 10 unidades compradas a R$ 5,00 e depois 10 a R$ 8,00, uma saída de 12 unidades terá custo de R$ 66,00 (10 × R$ 5,00 + 2 × R$ 8,00). Se não houver custo conhecido suficiente, o sistema sinaliza o custo pendente e impede uma margem apresentada como se fosse confiável.
+Escolha o produto, a quantidade e a data da saída. O preço vem do cadastro do produto. Antes de salvar, confira a prévia dos lotes e a margem. As unidades mais antigas saem primeiro, pela ordem FIFO explicada no início deste guia. A venda é recusada se ficar abaixo do custo FIFO da quantidade retirada ou se houver custo pendente nas unidades necessárias.
 
 No relatório, toda operação do tipo **Saída** conta como venda para os indicadores de receita e margem. Ainda não existe um tipo separado para retirada por perda, consumo interno ou uso; por isso, não use **Saída** para esses casos se não quiser que sejam contabilizados como receita. O sistema não emite nota fiscal nem confirma recebimento de pagamento.
 
@@ -160,7 +160,9 @@ Mostra produtos com saldo igual ou abaixo do mínimo definido individualmente. A
 
 ### 9. Relatórios (administrador)
 
-Os filtros disponíveis são período (últimos 7 dias, últimos 30 dias, último mês ou período personalizado), produto e fornecedor. No período personalizado, informe as datas inicial e final; a data final é incluída no cálculo. A tela valida o intervalo e atualiza indicadores, gráficos e detalhes por produto para refletir as datas escolhidas. Ao abrir a tela, o sistema atualiza os dados antes de calcular. A exportação gera um CSV com a posição de estoque, resumo financeiro e período selecionado.
+Escolha o período (**Últimos 7 dias**, **Últimos 30 dias**, **Mês atual** ou **Período personalizado**) e, se precisar, filtre por produto e fornecedor. No período personalizado, os dois dias informados entram no cálculo. **Mês atual** começa no primeiro dia do mês.
+
+A tela consulta os dados ao abrir e ao mudar os filtros. O botão **Comparar período anterior** coloca os números ao lado dos de outro intervalo com a mesma duração. O CSV reúne o período, a posição atual do estoque, o resumo financeiro e as movimentações.
 
 #### Indicadores
 
@@ -194,17 +196,17 @@ Registra ações e movimentações realizadas, incluindo data/hora, usuário, a�
 
 ### 11. Configurações
 
-Permite que cada usuário troque a própria senha sem ser obrigado a fazê-lo no primeiro acesso. É necessário informar senha atual, nova senha (mínimo de 12 caracteres) e confirmação. A senha é protegida pelo backend; não deve ser compartilhada.
+Para trocar sua senha, informe a senha atual, a nova senha e a confirmação. A nova senha precisa ter pelo menos 12 caracteres. A troca pode ser feita a qualquer momento; não há exigência de alteração no primeiro acesso.
 
-## Fluxos recomendados
+## Rotinas do dia a dia
 
 ### Configuração inicial do catálogo
 
 1. Cadastre as categorias usadas pelo armazém.
 2. Cadastre os fornecedores, incluindo os contatos confirmados.
 3. Cadastre cada produto uma única vez, escolhendo unidades de compra e venda e o fator de conversão.
-4. Vincule fornecedores ao produto pela ficha do fornecedor ou pela ação de fornecedores/preços do produto.
-5. Registre o saldo inicial como entrada real com fornecedor, data, custo e preço de venda, se esses dados forem conhecidos. Para saldo sem custo confiável, mantenha-o identificado como custo pendente e informe a base correta antes de usar margem.
+4. Abra a ficha do fornecedor e vincule os produtos que ele vende. A ação **Fornecedores e preços**, no produto, permite comparar os valores.
+5. Informe o saldo inicial com fornecedor, custo e preço de venda. Se houver saldo antigo com custo pendente, regularize-o em **Relatórios → Informar custo** antes de registrar a venda.
 
 ### Registrar uma compra e acompanhar seu resultado
 
@@ -215,12 +217,12 @@ Permite que cada usuário troque a própria senha sem ser obrigado a fazê-lo no
 
 ### Registrar uma venda e conferir lucro
 
-1. Registre a retirada como **Saída**, informando o preço praticado.
+1. Confira o preço no cadastro do produto e registre a retirada como **Saída**.
 2. O custo da saída será apurado consumindo lotes antigos primeiro.
 3. Em **Relatórios**, consulte **Receita registrada**, **Custo das saídas** e **Margem realizada**.
 4. Clique em **Margem realizada** para localizar o resultado por produto e abrir suas vendas detalhadas.
 
-## Conceitos importantes
+## Dúvidas frequentes
 
 - **Compra e cotação são diferentes:** compra é uma entrada que atualiza saldo e cria lote; cotação é apenas um preço informado e não mexe no estoque.
 - **Produto é único; fornecedor pode variar:** o mesmo cadastro de produto pode estar vinculado a vários fornecedores, cada um com histórico próprio.
@@ -229,5 +231,5 @@ Permite que cada usuário troque a própria senha sem ser obrigado a fazê-lo no
 - **Saída é tratada como venda:** no estado atual, uma saída entra na receita usando o preço atual cadastrado do produto. Retiradas não comerciais ainda não têm uma categoria própria.
 - **Projeção não é venda:** margem e venda estimadas do saldo mostram um cenário futuro usando preço atual, não dinheiro recebido.
 - **Fotos e dados:** imagens aceitas são JPEG, PNG ou WebP de até 5 MB; cadastros e operações ficam no banco, enquanto fotos ficam em armazenamento persistente separado.
-- **Sem importação automática:** o arquivo modelo de inventário serve para organizar o levantamento; a importação CSV ainda não está implementada.
+- **Planilha de inventário:** o arquivo modelo serve para organizar a contagem. Os produtos ainda precisam ser cadastrados pela interface; não há importação de CSV.
 

@@ -7,7 +7,9 @@ import { join } from 'node:path'
 
 const databaseName = process.env.TEST_DATABASE_NAME
 if (!databaseName || !/(?:_test|_qa)$/i.test(databaseName)) {
-  throw new Error('Defina TEST_DATABASE_NAME com o nome de um banco descartável terminado em _test ou _qa.')
+  throw new Error(
+    'Defina TEST_DATABASE_NAME com o nome de um banco descartável terminado em _test ou _qa.',
+  )
 }
 
 const databaseUrl = new URL(process.env.DATABASE_URL ?? '')
@@ -72,9 +74,27 @@ async function upload(path, file, contentType, cookie) {
 }
 
 async function login(username, password) {
-  const result = await call('/auth/login', { method: 'POST', origin: 'http://localhost:5173', body: { username, password } })
+  const result = await call('/auth/login', {
+    method: 'POST',
+    origin: 'http://localhost:5173',
+    body: { username, password },
+  })
   assert.equal(result.status, 200)
   return { user: result.payload.user, cookie: result.cookie }
+}
+
+function fortalezaDate(date = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Fortaleza',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .formatToParts(date)
+      .map(({ type, value }) => [type, value]),
+  )
+  return `${parts.year}-${parts.month}-${parts.day}`
 }
 
 after(async () => {
@@ -84,10 +104,17 @@ after(async () => {
 })
 
 test('fluxos de autenticação, permissões, estoque e auditoria persistem no banco', async () => {
-  const wrongPassword = await call('/auth/login', { method: 'POST', body: { username: process.env.SEED_ADMIN_USERNAME, password: 'senha-incorreta' } })
+  const wrongPassword = await call('/auth/login', {
+    method: 'POST',
+    body: { username: process.env.SEED_ADMIN_USERNAME, password: 'senha-incorreta' },
+  })
   assert.equal(wrongPassword.status, 401)
 
-  const blockedOrigin = await call('/auth/login', { method: 'POST', origin: 'https://origem-invalida.example', body: { username: process.env.SEED_ADMIN_USERNAME, password: initialPassword } })
+  const blockedOrigin = await call('/auth/login', {
+    method: 'POST',
+    origin: 'https://origem-invalida.example',
+    body: { username: process.env.SEED_ADMIN_USERNAME, password: initialPassword },
+  })
   assert.equal(blockedOrigin.status, 403)
 
   const admin = await login(process.env.SEED_ADMIN_USERNAME.toUpperCase(), initialPassword)
@@ -100,13 +127,15 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.deepEqual(firstLoginProducts.payload, [])
 
   const shortPassword = await call('/auth/change-password', {
-    method: 'POST', cookie: admin.cookie,
+    method: 'POST',
+    cookie: admin.cookie,
     body: { currentPassword: initialPassword, newPassword: 'curta' },
   })
   assert.equal(shortPassword.status, 400)
 
   const passwordUpdate = await call('/auth/change-password', {
-    method: 'POST', cookie: admin.cookie,
+    method: 'POST',
+    cookie: admin.cookie,
     body: { currentPassword: initialPassword, newPassword: updatedPassword },
   })
   assert.equal(passwordUpdate.status, 200)
@@ -116,29 +145,69 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   admin.cookie = passwordUpdate.cookie
   assert.equal((await call('/auth/me', { cookie: admin.cookie })).status, 200)
 
-  const category = await call('/categories', { method: 'POST', cookie: admin.cookie, body: { name: `Categoria ${suffix}`, description: 'Categoria criada durante teste automatizado.' } })
+  const category = await call('/categories', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      name: `Categoria ${suffix}`,
+      description: 'Categoria criada durante teste automatizado.',
+    },
+  })
   assert.equal(category.status, 201)
-  const changedCategory = await call(`/categories/${category.payload.id}`, { method: 'PATCH', cookie: admin.cookie, body: { name: `Categoria editada ${suffix}`, description: 'Descrição atualizada.' } })
+  const changedCategory = await call(`/categories/${category.payload.id}`, {
+    method: 'PATCH',
+    cookie: admin.cookie,
+    body: { name: `Categoria editada ${suffix}`, description: 'Descrição atualizada.' },
+  })
   assert.equal(changedCategory.status, 200)
   assert.equal(changedCategory.payload.description, 'Descrição atualizada.')
-  const invalidSupplier = await call('/suppliers', { method: 'POST', cookie: admin.cookie, body: { name: `Fornecedor inválido ${suffix}`, email: 'endereco-invalido' } })
+  const invalidSupplier = await call('/suppliers', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: { name: `Fornecedor inválido ${suffix}`, email: 'endereco-invalido' },
+  })
   assert.equal(invalidSupplier.status, 400)
   assert.equal(invalidSupplier.payload.error.code, 'INVALID_EMAIL')
-  const supplier = await call('/suppliers', { method: 'POST', cookie: admin.cookie, body: { name: `Fornecedor ${suffix}`, contact: '(85) 3000-0000', email: `fornecedor-${suffix}@example.test` } })
+  const supplier = await call('/suppliers', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      name: `Fornecedor ${suffix}`,
+      contact: '(85) 3000-0000',
+      email: `fornecedor-${suffix}@example.test`,
+    },
+  })
   assert.equal(supplier.status, 201)
   const reportBaseline = await call('/reports?period=7d', { cookie: admin.cookie })
   assert.equal(reportBaseline.status, 200)
-  const changedSupplier = await call(`/suppliers/${supplier.payload.id}`, { method: 'PATCH', cookie: admin.cookie, body: { name: supplier.payload.name, contact: '(85) 3000-1111', email: supplier.payload.email } })
+  const changedSupplier = await call(`/suppliers/${supplier.payload.id}`, {
+    method: 'PATCH',
+    cookie: admin.cookie,
+    body: { name: supplier.payload.name, contact: '(85) 3000-1111', email: supplier.payload.email },
+  })
   assert.equal(changedSupplier.status, 200)
   assert.equal(changedSupplier.payload.contact, '(85) 3000-1111')
 
   const product = await call('/products', {
-    method: 'POST', cookie: admin.cookie,
-    body: { code: `QA-${suffix}`, name: `Produto QA ${suffix}`, categoryId: category.payload.id, supplierId: supplier.payload.id, unit: 'Unidade', initialStock: 10, minimum: 3, entryCost: 10, price: 20 },
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      code: `QA-${suffix}`,
+      name: `Produto QA ${suffix}`,
+      categoryId: category.payload.id,
+      supplierId: supplier.payload.id,
+      unit: 'Unidade',
+      initialStock: 10,
+      minimum: 3,
+      entryCost: 10,
+      price: 20,
+    },
   })
   assert.equal(product.status, 201)
   assert.equal(product.payload.stock, 10)
-  const initialEntries = await call(`/products/${product.payload.id}/entries`, { cookie: admin.cookie })
+  const initialEntries = await call(`/products/${product.payload.id}/entries`, {
+    cookie: admin.cookie,
+  })
   assert.equal(initialEntries.status, 200)
   assert.equal(initialEntries.payload.length, 1)
   assert.equal(initialEntries.payload[0].supplier, supplier.payload.name)
@@ -146,86 +215,213 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.equal(Number(initialEntries.payload[0].unitSalePrice), 20)
   assert.equal(Number(initialEntries.payload[0].totalCost), 100)
 
-  const customReport = await call(`/reports?period=custom&from=2026-01-01&to=2026-12-31&productId=${product.payload.id}`, { cookie: admin.cookie })
+  const customReport = await call(
+    `/reports?period=custom&from=2026-01-01&to=2026-12-31&productId=${product.payload.id}`,
+    { cookie: admin.cookie },
+  )
   assert.equal(customReport.status, 200)
   assert.equal(customReport.payload.filters.from, '2026-01-01')
   assert.equal(customReport.payload.filters.to, '2026-12-31')
   assert.equal(customReport.payload.summary.entries, 1)
-  const invalidCustomPeriod = await call('/reports?period=custom&from=2026-12-31&to=2026-01-01', { cookie: admin.cookie })
+  const invalidCustomPeriod = await call('/reports?period=custom&from=2026-12-31&to=2026-01-01', {
+    cookie: admin.cookie,
+  })
   assert.equal(invalidCustomPeriod.status, 400)
-  const customHistory = await call(`/reports/product/${product.payload.id}/movements?period=custom&from=2026-01-01&to=2026-12-31`, { cookie: admin.cookie })
+  const customHistory = await call(
+    `/reports/product/${product.payload.id}/movements?period=custom&from=2026-01-01&to=2026-12-31`,
+    { cookie: admin.cookie },
+  )
   assert.equal(customHistory.status, 200)
   assert.equal(customHistory.payload.total, 1)
 
   await migrate(database)
-  const entriesAfterRestartMigration = await call(`/products/${product.payload.id}/entries`, { cookie: admin.cookie })
+  const entriesAfterRestartMigration = await call(`/products/${product.payload.id}/entries`, {
+    cookie: admin.cookie,
+  })
   assert.equal(entriesAfterRestartMigration.payload.length, 1)
   assert.equal(entriesAfterRestartMigration.payload[0].quantityRemaining, 10)
-  const unknownCostProduct = await call('/products', { method: 'POST', cookie: admin.cookie, body: { code: `QA-CUSTO-${suffix}`, name: `Saldo sem custo ${suffix}`, categoryId: category.payload.id, unit: 'Unidade', price: 15, initialStock: 0 } })
+  const unknownCostProduct = await call('/products', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      code: `QA-CUSTO-${suffix}`,
+      name: `Saldo sem custo ${suffix}`,
+      categoryId: category.payload.id,
+      unit: 'Unidade',
+      price: 15,
+      initialStock: 0,
+    },
+  })
   assert.equal(unknownCostProduct.status, 201)
-  const registeredProductsReport = await call(`/reports?period=7d&productId=${unknownCostProduct.payload.id}`, { cookie: admin.cookie })
+  const registeredProductsReport = await call(
+    `/reports?period=7d&productId=${unknownCostProduct.payload.id}`,
+    { cookie: admin.cookie },
+  )
   assert.equal(registeredProductsReport.payload.productMargins.length, 1)
-  assert.equal(registeredProductsReport.payload.productMargins[0].productId, unknownCostProduct.payload.id)
+  assert.equal(
+    registeredProductsReport.payload.productMargins[0].productId,
+    unknownCostProduct.payload.id,
+  )
   assert.equal(registeredProductsReport.payload.productMargins[0].purchaseCount, 0)
   assert.equal(registeredProductsReport.payload.productMargins[0].saleCount, 0)
   assert.equal(registeredProductsReport.payload.productMargins[0].knownUnits, 0)
-  const adjustmentWithoutCost = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: unknownCostProduct.payload.id, type: 'Ajuste', adjustment: 4, reason: 'Contagem inicial' } })
+  const adjustmentWithoutCost = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: unknownCostProduct.payload.id,
+      type: 'Ajuste',
+      adjustment: 4,
+      reason: 'Contagem inicial',
+    },
+  })
   assert.equal(adjustmentWithoutCost.status, 400)
   assert.equal(adjustmentWithoutCost.payload.error.code, 'ADJUSTMENT_COST_REQUIRED')
-  const adjustmentWithCost = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: unknownCostProduct.payload.id, type: 'Ajuste', adjustment: 4, unitCost: 8, reason: 'Contagem inicial com custo conhecido' } })
+  const adjustmentWithCost = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: unknownCostProduct.payload.id,
+      type: 'Ajuste',
+      adjustment: 4,
+      unitCost: 8,
+      reason: 'Contagem inicial com custo conhecido',
+    },
+  })
   assert.equal(adjustmentWithCost.status, 201)
-  const adjustedProduct = (await call('/products', { cookie: admin.cookie })).payload.find((item) => item.id === unknownCostProduct.payload.id)
+  const adjustedProduct = (await call('/products', { cookie: admin.cookie })).payload.find(
+    (item) => item.id === unknownCostProduct.payload.id,
+  )
   assert.equal(adjustedProduct.costPending, false)
-  await database.query('UPDATE inventory_lots SET unit_cost=NULL WHERE movement_id=$1', [adjustmentWithCost.payload.id])
-  const pendingCostReport = await call(`/reports?period=7d&productId=${unknownCostProduct.payload.id}`, { cookie: admin.cookie })
-  const pendingCostMargin = pendingCostReport.payload.productMargins.find((item) => item.productId === unknownCostProduct.payload.id)
+  await database.query('UPDATE inventory_lots SET unit_cost=NULL WHERE movement_id=$1', [
+    adjustmentWithCost.payload.id,
+  ])
+  const pendingCostReport = await call(
+    `/reports?period=7d&productId=${unknownCostProduct.payload.id}`,
+    { cookie: admin.cookie },
+  )
+  const pendingCostMargin = pendingCostReport.payload.productMargins.find(
+    (item) => item.productId === unknownCostProduct.payload.id,
+  )
   assert.equal(pendingCostMargin.knownUnits, 0)
   assert.equal(pendingCostMargin.pendingUnits, 4)
   assert.equal(Number(pendingCostMargin.forecastRevenue), 0)
   assert.equal(Number(pendingCostMargin.forecastMargin), 0)
   assert.equal(pendingCostReport.payload.summary.costPending, true)
-  const blockedUnknownCostSale = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: unknownCostProduct.payload.id, type: 'Saída', quantity: 1, unitSalePrice: 15 } })
+  const blockedUnknownCostSale = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: unknownCostProduct.payload.id,
+      type: 'Saída',
+      quantity: 1,
+      unitSalePrice: 15,
+    },
+  })
   assert.equal(blockedUnknownCostSale.status, 409)
   assert.equal(blockedUnknownCostSale.payload.error.code, 'COST_BASELINE_REQUIRED')
-  const removeUncostedStock = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: unknownCostProduct.payload.id, type: 'Ajuste', adjustment: -4, reason: 'Retirada de saldo sem custo conhecido' } })
+  const removeUncostedStock = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: unknownCostProduct.payload.id,
+      type: 'Ajuste',
+      adjustment: -4,
+      reason: 'Retirada de saldo sem custo conhecido',
+    },
+  })
   assert.equal(removeUncostedStock.status, 201)
-  const emptyProduct = (await call('/products', { cookie: admin.cookie })).payload.find((item) => item.id === unknownCostProduct.payload.id)
+  const emptyProduct = (await call('/products', { cookie: admin.cookie })).payload.find(
+    (item) => item.id === unknownCostProduct.payload.id,
+  )
   assert.equal(emptyProduct.stock, 0)
   assert.equal(emptyProduct.costPending, false)
-  assert.equal((await call(`/products/${unknownCostProduct.payload.id}`, { method: 'DELETE', cookie: admin.cookie })).status, 204)
-  const supplierEntries = await call(`/suppliers/${supplier.payload.id}/entries`, { cookie: admin.cookie })
+  assert.equal(
+    (
+      await call(`/products/${unknownCostProduct.payload.id}`, {
+        method: 'DELETE',
+        cookie: admin.cookie,
+      })
+    ).status,
+    204,
+  )
+  const supplierEntries = await call(`/suppliers/${supplier.payload.id}/entries`, {
+    cookie: admin.cookie,
+  })
   assert.equal(supplierEntries.status, 200)
-  const supplierProductEntry = supplierEntries.payload.find((entry) => entry.productId === product.payload.id)
+  const supplierProductEntry = supplierEntries.payload.entries.find(
+    (entry) => entry.productId === product.payload.id,
+  )
   assert.equal(supplierProductEntry.productName, product.payload.name)
   assert.equal(Number(supplierProductEntry.unitCost), 10)
-  const changedProduct = await call(`/products/${product.payload.id}`, { method: 'PATCH', cookie: admin.cookie, body: { code: product.payload.code, name: `Produto editado ${suffix}`, categoryId: category.payload.id, supplierId: supplier.payload.id, unit: 'Unidade', minimum: 4, price: 12 } })
+  const changedProduct = await call(`/products/${product.payload.id}`, {
+    method: 'PATCH',
+    cookie: admin.cookie,
+    body: {
+      code: product.payload.code,
+      name: `Produto editado ${suffix}`,
+      categoryId: category.payload.id,
+      supplierId: supplier.payload.id,
+      unit: 'Unidade',
+      minimum: 4,
+      price: 12,
+    },
+  })
   assert.equal(changedProduct.status, 200)
   assert.equal(changedProduct.payload.stock, 10)
   assert.equal(changedProduct.payload.minimum, 4)
 
-  const alternateSupplier = await call('/suppliers', { method: 'POST', cookie: admin.cookie, body: { name: `Outro fornecedor ${suffix}`, contact: '(85) 99999-0000', email: `outro-${suffix}@example.test` } })
+  const alternateSupplier = await call('/suppliers', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      name: `Outro fornecedor ${suffix}`,
+      contact: '(85) 99999-0000',
+      email: `outro-${suffix}@example.test`,
+    },
+  })
   assert.equal(alternateSupplier.status, 201)
   const quote = await call(`/suppliers/${alternateSupplier.payload.id}/quotes`, {
-    method: 'POST', cookie: admin.cookie,
-    body: { productId: product.payload.id, unitPrice: 3.75, quotedAt: '2026-10-20', note: 'Entrega em cinco dias.' },
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: product.payload.id,
+      unitPrice: 3.75,
+      quotedAt: '2026-10-20',
+      note: 'Entrega em cinco dias.',
+    },
   })
   assert.equal(quote.status, 201)
   assert.equal(quote.payload.unitPrice, 3.75)
   const newerQuote = await call(`/suppliers/${alternateSupplier.payload.id}/quotes`, {
-    method: 'POST', cookie: admin.cookie,
-    body: { productId: product.payload.id, unitPrice: 4.15, quotedAt: '2026-10-22', note: 'Preço atualizado.' },
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: product.payload.id,
+      unitPrice: 4.15,
+      quotedAt: '2026-10-22',
+      note: 'Preço atualizado.',
+    },
   })
   assert.equal(newerQuote.status, 201)
-  const quoteHistory = await call(`/suppliers/${alternateSupplier.payload.id}/quotes`, { cookie: admin.cookie })
+  const quoteHistory = await call(`/suppliers/${alternateSupplier.payload.id}/quotes`, {
+    cookie: admin.cookie,
+  })
   assert.equal(quoteHistory.status, 200)
-  assert.equal(quoteHistory.payload.length, 2)
-  assert.equal(quoteHistory.payload[0].unitPrice, 4.15)
-  assert.equal(quoteHistory.payload[0].productId, product.payload.id)
+  assert.equal(quoteHistory.payload.quotes.length, 2)
+  assert.equal(quoteHistory.payload.quotes[0].unitPrice, 4.15)
+  assert.equal(quoteHistory.payload.quotes[0].productId, product.payload.id)
   const supplierPricesSaved = await call(`/products/${product.payload.id}`, {
-    method: 'PATCH', cookie: admin.cookie,
+    method: 'PATCH',
+    cookie: admin.cookie,
     body: {
-      code: product.payload.code, name: changedProduct.payload.name, categoryId: category.payload.id,
-      supplierId: supplier.payload.id, unit: 'Unidade', minimum: 4, price: 12,
+      code: product.payload.code,
+      name: changedProduct.payload.name,
+      categoryId: category.payload.id,
+      supplierId: supplier.payload.id,
+      unit: 'Unidade',
+      minimum: 4,
+      price: 12,
       supplierOffers: [
         { supplierId: supplier.payload.id, unitPrice: 8.5, quotedAt: '2026-10-21' },
         { supplierId: alternateSupplier.payload.id, unitPrice: 2.25, quotedAt: '2026-10-23' },
@@ -234,40 +430,113 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   })
   assert.equal(supplierPricesSaved.status, 200)
   const linkedSuppliers = await call('/suppliers', { cookie: admin.cookie })
-  assert.equal(linkedSuppliers.payload.find((item) => item.id === alternateSupplier.payload.id).products, 1)
-  const alternateProducts = await call(`/suppliers/${alternateSupplier.payload.id}/products`, { cookie: admin.cookie })
+  assert.equal(
+    linkedSuppliers.payload.find((item) => item.id === alternateSupplier.payload.id).products,
+    1,
+  )
+  const alternateProducts = await call(`/suppliers/${alternateSupplier.payload.id}/products`, {
+    cookie: admin.cookie,
+  })
   assert.equal(alternateProducts.status, 200)
   assert.ok(alternateProducts.payload.some((item) => item.id === product.payload.id))
-  const linkedAgain = await call(`/suppliers/${alternateSupplier.payload.id}/products`, { method: 'POST', cookie: admin.cookie, body: { productId: product.payload.id } })
+  const linkedAgain = await call(`/suppliers/${alternateSupplier.payload.id}/products`, {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: { productId: product.payload.id },
+  })
   assert.equal(linkedAgain.status, 201)
-  const unlinked = await call(`/suppliers/${alternateSupplier.payload.id}/products/${product.payload.id}`, { method: 'DELETE', cookie: admin.cookie })
+  const unlinked = await call(
+    `/suppliers/${alternateSupplier.payload.id}/products/${product.payload.id}`,
+    { method: 'DELETE', cookie: admin.cookie },
+  )
   assert.equal(unlinked.status, 204)
-  assert.equal((await call(`/suppliers/${alternateSupplier.payload.id}/products`, { cookie: admin.cookie })).payload.some((item) => item.id === product.payload.id), false)
-  assert.equal((await call(`/suppliers/${alternateSupplier.payload.id}/quotes`, { cookie: admin.cookie })).payload.length, 2)
+  assert.equal(
+    (
+      await call(`/suppliers/${alternateSupplier.payload.id}/products`, { cookie: admin.cookie })
+    ).payload.some((item) => item.id === product.payload.id),
+    false,
+  )
+  assert.equal(
+    (await call(`/suppliers/${alternateSupplier.payload.id}/quotes`, { cookie: admin.cookie }))
+      .payload.quotes.length,
+    2,
+  )
   await migrate(database)
-  assert.equal((await call(`/suppliers/${alternateSupplier.payload.id}/products`, { cookie: admin.cookie })).payload.some((item) => item.id === product.payload.id), false)
-  const relinked = await call(`/suppliers/${alternateSupplier.payload.id}/products`, { method: 'POST', cookie: admin.cookie, body: { productId: product.payload.id } })
+  assert.equal(
+    (
+      await call(`/suppliers/${alternateSupplier.payload.id}/products`, { cookie: admin.cookie })
+    ).payload.some((item) => item.id === product.payload.id),
+    false,
+  )
+  const relinked = await call(`/suppliers/${alternateSupplier.payload.id}/products`, {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: { productId: product.payload.id },
+  })
   assert.equal(relinked.status, 201)
-  const deactivatedSupplier = await call(`/suppliers/${alternateSupplier.payload.id}/status`, { method: 'PATCH', cookie: admin.cookie, body: { active: false } })
+  const deactivatedSupplier = await call(`/suppliers/${alternateSupplier.payload.id}/status`, {
+    method: 'PATCH',
+    cookie: admin.cookie,
+    body: { active: false },
+  })
   assert.equal(deactivatedSupplier.status, 200)
   assert.equal(deactivatedSupplier.payload.status, 'Inativo')
   const activeSuppliers = await call('/suppliers', { cookie: admin.cookie })
   assert.ok(!activeSuppliers.payload.some((item) => item.id === alternateSupplier.payload.id))
   const allSuppliers = await call('/suppliers?status=all', { cookie: admin.cookie })
-  assert.equal(allSuppliers.payload.find((item) => item.id === alternateSupplier.payload.id).status, 'Inativo')
-  assert.equal((await call(`/suppliers/${alternateSupplier.payload.id}/products`, { cookie: admin.cookie })).status, 200)
-  assert.equal((await call(`/suppliers/${alternateSupplier.payload.id}/status`, { method: 'PATCH', cookie: admin.cookie, body: { active: true } })).payload.status, 'Ativo')
+  assert.equal(
+    allSuppliers.payload.find((item) => item.id === alternateSupplier.payload.id).status,
+    'Inativo',
+  )
+  assert.equal(
+    (await call(`/suppliers/${alternateSupplier.payload.id}/products`, { cookie: admin.cookie }))
+      .status,
+    200,
+  )
+  assert.equal(
+    (
+      await call(`/suppliers/${alternateSupplier.payload.id}/status`, {
+        method: 'PATCH',
+        cookie: admin.cookie,
+        body: { active: true },
+      })
+    ).payload.status,
+    'Ativo',
+  )
   const png = Buffer.from('89504e470d0a1a0a00000000', 'hex')
-  const invalidImage = await upload(`/products/${product.payload.id}/image`, Buffer.from('not an image'), 'image/png', admin.cookie)
+  const invalidImage = await upload(
+    `/products/${product.payload.id}/image`,
+    Buffer.from('not an image'),
+    'image/png',
+    admin.cookie,
+  )
   assert.equal(invalidImage.status, 415)
-  const oversizedImage = await upload(`/products/${product.payload.id}/image`, Buffer.alloc(5 * 1024 * 1024 + 1), 'image/png', admin.cookie)
+  const oversizedImage = await upload(
+    `/products/${product.payload.id}/image`,
+    Buffer.alloc(5 * 1024 * 1024 + 1),
+    'image/png',
+    admin.cookie,
+  )
   assert.equal(oversizedImage.status, 413)
-  const productImage = await upload(`/products/${product.payload.id}/image`, png, 'image/png', admin.cookie)
+  const productImage = await upload(
+    `/products/${product.payload.id}/image`,
+    png,
+    'image/png',
+    admin.cookie,
+  )
   assert.equal(productImage.status, 200)
   assert.match(productImage.payload.imageUrl, /^\/uploads\/[0-9a-f-]+\.png$/)
-  const supplierImage = await upload(`/suppliers/${alternateSupplier.payload.id}/image`, png, 'image/png', admin.cookie)
+  const supplierImage = await upload(
+    `/suppliers/${alternateSupplier.payload.id}/image`,
+    png,
+    'image/png',
+    admin.cookie,
+  )
   assert.equal(supplierImage.status, 200)
-  const imageResponse = await fetch(`${baseUrl.replace('/api', '')}${productImage.payload.imageUrl}`, { headers: { cookie: admin.cookie } })
+  const imageResponse = await fetch(
+    `${baseUrl.replace('/api', '')}${productImage.payload.imageUrl}`,
+    { headers: { cookie: admin.cookie } },
+  )
   assert.equal(imageResponse.status, 200)
   assert.equal(imageResponse.headers.get('content-type'), 'image/png')
   assert.deepEqual(Buffer.from(await imageResponse.arrayBuffer()), png)
@@ -276,15 +545,37 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.equal(unchangedStock.payload.find((item) => item.id === product.payload.id).price, 12)
 
   const duplicate = await call('/products', {
-    method: 'POST', cookie: admin.cookie,
-    body: { code: `QA-${suffix}`, name: 'Duplicado', categoryId: category.payload.id, unit: 'Unidade', minimum: 0, price: 1, initialStock: 0 },
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      code: `QA-${suffix}`,
+      name: 'Duplicado',
+      categoryId: category.payload.id,
+      unit: 'Unidade',
+      minimum: 0,
+      price: 1,
+      initialStock: 0,
+    },
   })
   assert.equal(duplicate.status, 409)
 
-  const outgoing = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: product.payload.id, type: 'Saída', quantity: 2, reason: 'Teste de retirada' } })
+  const outgoing = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: product.payload.id,
+      type: 'Saída',
+      quantity: 2,
+      reason: 'Teste de retirada',
+    },
+  })
   assert.equal(outgoing.status, 201)
   assert.equal(outgoing.payload.quantity, -2)
-  const insufficient = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: product.payload.id, type: 'Saída', quantity: 99 } })
+  const insufficient = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: { productId: product.payload.id, type: 'Saída', quantity: 99 },
+  })
   assert.equal(insufficient.status, 409)
   assert.equal(insufficient.payload.error.code, 'INSUFFICIENT_STOCK')
 
@@ -299,25 +590,54 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.equal(report.status, 200)
   assert.equal(report.payload.summary.entries - reportBaseline.payload.summary.entries, 1)
   assert.equal(report.payload.summary.exits - reportBaseline.payload.summary.exits, 1)
-  assert.equal(Number(report.payload.summary.entryCostTotal) - Number(reportBaseline.payload.summary.entryCostTotal), 100)
-  assert.equal(Number(report.payload.summary.potentialSaleTotal) - Number(reportBaseline.payload.summary.potentialSaleTotal), 200)
-  assert.equal(Number(report.payload.summary.potentialMargin) - Number(reportBaseline.payload.summary.potentialMargin), 100)
+  assert.equal(
+    Number(report.payload.summary.entryCostTotal) -
+      Number(reportBaseline.payload.summary.entryCostTotal),
+    100,
+  )
+  assert.equal(
+    Number(report.payload.summary.potentialSaleTotal) -
+      Number(reportBaseline.payload.summary.potentialSaleTotal),
+    200,
+  )
+  assert.equal(
+    Number(report.payload.summary.potentialMargin) -
+      Number(reportBaseline.payload.summary.potentialMargin),
+    100,
+  )
   assert.ok(report.payload.products.some((item) => item.id === product.payload.id))
 
   const packProduct = await call('/products', {
-    method: 'POST', cookie: admin.cookie,
+    method: 'POST',
+    cookie: admin.cookie,
     body: {
-      code: `QA-FARDO-${suffix}`, name: `Produto em fardo ${suffix}`, categoryId: category.payload.id,
-      supplierId: supplier.payload.id, unit: 'Unidade', purchaseUnit: 'Fardo', unitsPerPurchase: 12,
-      initialStock: 0, minimum: 0, price: 15,
+      code: `QA-FARDO-${suffix}`,
+      name: `Produto em fardo ${suffix}`,
+      categoryId: category.payload.id,
+      supplierId: supplier.payload.id,
+      unit: 'Unidade',
+      purchaseUnit: 'Fardo',
+      unitsPerPurchase: 12,
+      initialStock: 0,
+      minimum: 0,
+      price: 15,
     },
   })
   assert.equal(packProduct.status, 201)
   assert.equal(packProduct.payload.purchaseUnit, 'Fardo')
   assert.equal(packProduct.payload.unitsPerPurchase, 12)
   const packEntry = await call('/movements', {
-    method: 'POST', cookie: admin.cookie,
-    body: { productId: packProduct.payload.id, type: 'Entrada', quantity: 2, supplierId: supplier.payload.id, unitCost: 120, unitSalePrice: 15, reason: 'Compra em fardos' },
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: packProduct.payload.id,
+      type: 'Entrada',
+      quantity: 2,
+      supplierId: supplier.payload.id,
+      unitCost: 120,
+      unitSalePrice: 15,
+      reason: 'Compra em fardos',
+    },
   })
   assert.equal(packEntry.status, 201)
   assert.equal(packEntry.payload.quantity, 24)
@@ -325,75 +645,160 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.equal(packEntry.payload.purchaseUnit, 'Fardo')
   assert.equal(packEntry.payload.purchaseConversion, 12)
   assert.equal(packEntry.payload.purchaseUnitCost, 120)
-  await database.query('UPDATE inventory_lots SET unit_cost=NULL WHERE movement_id=$1', [packEntry.payload.id])
-  const pendingPack = (await call('/products', { cookie: admin.cookie })).payload.find((item) => item.id === packProduct.payload.id)
+  await database.query('UPDATE inventory_lots SET unit_cost=NULL WHERE movement_id=$1', [
+    packEntry.payload.id,
+  ])
+  const pendingPack = (await call('/products', { cookie: admin.cookie })).payload.find(
+    (item) => item.id === packProduct.payload.id,
+  )
   assert.equal(pendingPack.costPending, true)
   assert.equal(pendingPack.unitsPendingCost, 24)
   const assignedPendingCost = await call(`/products/${packProduct.payload.id}/opening-cost`, {
-    method: 'PATCH', cookie: admin.cookie,
+    method: 'PATCH',
+    cookie: admin.cookie,
     body: { unitCost: 10, reason: 'Teste de regularização de lote antigo' },
   })
   assert.equal(assignedPendingCost.status, 200)
   assert.equal(assignedPendingCost.payload.unitsAssigned, 24)
-  const regularizedPack = (await call('/products', { cookie: admin.cookie })).payload.find((item) => item.id === packProduct.payload.id)
+  const regularizedPack = (await call('/products', { cookie: admin.cookie })).payload.find(
+    (item) => item.id === packProduct.payload.id,
+  )
   assert.equal(regularizedPack.costPending, false)
   assert.equal(Number(regularizedPack.averageCost), 10)
-  const packEntries = await call(`/products/${packProduct.payload.id}/entries`, { cookie: admin.cookie })
+  const packEntries = await call(`/products/${packProduct.payload.id}/entries`, {
+    cookie: admin.cookie,
+  })
   assert.equal(packEntries.status, 200)
   assert.equal(packEntries.payload[0].quantity, 24)
   assert.equal(packEntries.payload[0].purchaseQuantity, 2)
   assert.equal(packEntries.payload[0].purchaseUnit, 'Fardo')
   assert.equal(Number(packEntries.payload[0].unitCost), 10)
   assert.equal(Number(packEntries.payload[0].purchaseUnitCost), 120)
-  const supplierPackHistory = await call(`/suppliers/${supplier.payload.id}/entries`, { cookie: admin.cookie })
-  const regularizedSupplierPurchase = supplierPackHistory.payload.find((entry) => entry.productId === packProduct.payload.id)
+  const supplierPackHistory = await call(`/suppliers/${supplier.payload.id}/entries`, {
+    cookie: admin.cookie,
+  })
+  const regularizedSupplierPurchase = supplierPackHistory.payload.entries.find(
+    (entry) => entry.productId === packProduct.payload.id,
+  )
   assert.equal(Number(regularizedSupplierPurchase.unitCost), 10)
   assert.equal(Number(regularizedSupplierPurchase.purchaseUnitCost), 120)
   const packSale = await call('/movements', {
-    method: 'POST', cookie: admin.cookie,
-    body: { productId: packProduct.payload.id, type: 'Saída', quantity: 3, unitSalePrice: 15, reason: 'Venda em unidades' },
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: packProduct.payload.id,
+      type: 'Saída',
+      quantity: 3,
+      unitSalePrice: 15,
+      reason: 'Venda em unidades',
+    },
   })
   assert.equal(packSale.status, 201)
   assert.equal(packSale.payload.quantity, -3)
   assert.equal(packSale.payload.fifoCost, 30)
   const missingAdjustmentCost = await call('/movements', {
-    method: 'POST', cookie: admin.cookie,
-    body: { productId: packProduct.payload.id, type: 'Ajuste', adjustment: 1, reason: 'Teste de validação' },
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: packProduct.payload.id,
+      type: 'Ajuste',
+      adjustment: 1,
+      reason: 'Teste de validação',
+    },
   })
   assert.equal(missingAdjustmentCost.status, 400)
   assert.equal(missingAdjustmentCost.payload.error.code, 'ADJUSTMENT_COST_REQUIRED')
   const costedAdjustment = await call('/movements', {
-    method: 'POST', cookie: admin.cookie,
-    body: { productId: packProduct.payload.id, type: 'Ajuste', adjustment: 1, unitCost: 8, reason: 'Contagem positiva com custo conhecido' },
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: packProduct.payload.id,
+      type: 'Ajuste',
+      adjustment: 1,
+      unitCost: 8,
+      reason: 'Contagem positiva com custo conhecido',
+    },
   })
   assert.equal(costedAdjustment.status, 201)
-  const packProductAfterSale = (await call('/products', { cookie: admin.cookie })).payload.find((item) => item.id === packProduct.payload.id)
+  const packProductAfterSale = (await call('/products', { cookie: admin.cookie })).payload.find(
+    (item) => item.id === packProduct.payload.id,
+  )
   assert.equal(packProductAfterSale.stock, 22)
-  assert.equal((await call('/movements', {
-    method: 'POST', cookie: admin.cookie,
-    body: { productId: packProduct.payload.id, type: 'Saída', quantity: 22, unitSalePrice: 15, reason: 'Encerramento do teste de unidade de compra' },
-  })).status, 201)
-  assert.equal((await call(`/products/${packProduct.payload.id}`, { method: 'DELETE', cookie: admin.cookie })).status, 204)
+  assert.equal(
+    (
+      await call('/movements', {
+        method: 'POST',
+        cookie: admin.cookie,
+        body: {
+          productId: packProduct.payload.id,
+          type: 'Saída',
+          quantity: 22,
+          unitSalePrice: 15,
+          reason: 'Encerramento do teste de unidade de compra',
+        },
+      })
+    ).status,
+    201,
+  )
+  assert.equal(
+    (await call(`/products/${packProduct.payload.id}`, { method: 'DELETE', cookie: admin.cookie }))
+      .status,
+    204,
+  )
 
   const createdUser = await call('/users', {
-    method: 'POST', cookie: admin.cookie,
-    body: { name: `Usuário QA ${suffix}`, username: `novo-${suffix}`, email: `novo-${suffix}@example.test`, password: updatedPassword, role: 'operator' },
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      name: `Usuário QA ${suffix}`,
+      username: `novo-${suffix}`,
+      email: `novo-${suffix}@example.test`,
+      password: updatedPassword,
+      role: 'operator',
+    },
   })
   assert.equal(createdUser.status, 201)
   assert.equal(createdUser.payload.username, `novo-${suffix}`)
   assert.equal(Object.hasOwn(createdUser.payload, 'mustChangePassword'), false)
-  const duplicateUsername = await call('/users', { method: 'POST', cookie: admin.cookie, body: { name: 'Usuário duplicado', username: `novo-${suffix}`, email: `outro-${suffix}@example.test`, password: updatedPassword, role: 'operator' } })
+  const duplicateUsername = await call('/users', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      name: 'Usuário duplicado',
+      username: `novo-${suffix}`,
+      email: `outro-${suffix}@example.test`,
+      password: updatedPassword,
+      role: 'operator',
+    },
+  })
   assert.equal(duplicateUsername.status, 409)
   const createdUserSession = await login(`novo-${suffix}`, updatedPassword)
   assert.equal((await call('/products', { cookie: createdUserSession.cookie })).status, 200)
-  const changedUser = await call(`/users/${createdUser.payload.id}`, { method: 'PATCH', cookie: admin.cookie, body: { role: 'admin', active: true } })
+  const changedUser = await call(`/users/${createdUser.payload.id}`, {
+    method: 'PATCH',
+    cookie: admin.cookie,
+    body: { role: 'admin', active: true },
+  })
   assert.equal(changedUser.status, 200)
   assert.equal(changedUser.payload.roleKey, 'admin')
-  const disabledUser = await call(`/users/${createdUser.payload.id}`, { method: 'PATCH', cookie: admin.cookie, body: { role: 'operator', active: false } })
+  const disabledUser = await call(`/users/${createdUser.payload.id}`, {
+    method: 'PATCH',
+    cookie: admin.cookie,
+    body: { role: 'operator', active: false },
+  })
   assert.equal(disabledUser.status, 200)
   assert.equal(disabledUser.payload.status, 'Inativo')
   assert.equal((await call('/auth/me', { cookie: createdUserSession.cookie })).status, 401)
-  assert.equal((await call(`/users/${createdUser.payload.id}`, { method: 'PATCH', cookie: admin.cookie, body: { role: 'operator', active: true } })).status, 200)
+  assert.equal(
+    (
+      await call(`/users/${createdUser.payload.id}`, {
+        method: 'PATCH',
+        cookie: admin.cookie,
+        body: { role: 'operator', active: true },
+      })
+    ).status,
+    200,
+  )
   assert.equal((await call('/auth/me', { cookie: createdUserSession.cookie })).status, 401)
   assert.equal((await login(`novo-${suffix}`, updatedPassword)).user.roleKey, 'operator')
 
@@ -403,22 +808,64 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   const supplierOptions = await call('/suppliers/options', { cookie: operator.cookie })
   assert.equal(supplierOptions.status, 200)
   assert.deepEqual(Object.keys(supplierOptions.payload[0]).sort(), ['id', 'name'])
-  const operatorPasswordUpdate = await call('/auth/change-password', { method: 'POST', cookie: operator.cookie, body: { currentPassword: initialPassword, newPassword: updatedPassword } })
+  const operatorPasswordUpdate = await call('/auth/change-password', {
+    method: 'POST',
+    cookie: operator.cookie,
+    body: { currentPassword: initialPassword, newPassword: updatedPassword },
+  })
   assert.equal(operatorPasswordUpdate.status, 200)
   operator.cookie = operatorPasswordUpdate.cookie
   assert.equal((await call('/products', { cookie: operator.cookie })).status, 200)
   assert.equal((await call('/users', { cookie: operator.cookie })).status, 403)
   assert.equal((await call('/reports', { cookie: operator.cookie })).status, 403)
   assert.equal((await call('/audit', { cookie: operator.cookie })).status, 403)
-  assert.equal((await call(`/suppliers/${alternateSupplier.payload.id}/quotes`, { cookie: operator.cookie })).status, 403)
-  assert.equal((await call(`/suppliers/${alternateSupplier.payload.id}/entries`, { cookie: operator.cookie })).status, 403)
-  assert.equal((await call(`/products/${product.payload.id}/suppliers`, { cookie: operator.cookie })).status, 403)
-  assert.equal((await upload(`/products/${product.payload.id}/image`, png, 'image/png', operator.cookie)).status, 403)
-  assert.equal((await call('/categories', { method: 'POST', cookie: operator.cookie, body: { name: `Proibida ${suffix}` } })).status, 403)
+  assert.equal(
+    (await call(`/suppliers/${alternateSupplier.payload.id}/quotes`, { cookie: operator.cookie }))
+      .status,
+    403,
+  )
+  assert.equal(
+    (await call(`/suppliers/${alternateSupplier.payload.id}/entries`, { cookie: operator.cookie }))
+      .status,
+    403,
+  )
+  assert.equal(
+    (await call(`/products/${product.payload.id}/suppliers`, { cookie: operator.cookie })).status,
+    403,
+  )
+  assert.equal(
+    (await upload(`/products/${product.payload.id}/image`, png, 'image/png', operator.cookie))
+      .status,
+    403,
+  )
+  assert.equal(
+    (
+      await call('/categories', {
+        method: 'POST',
+        cookie: operator.cookie,
+        body: { name: `Proibida ${suffix}` },
+      })
+    ).status,
+    403,
+  )
 
-  const operatorEntry = await call('/movements', { method: 'POST', cookie: operator.cookie, body: { productId: product.payload.id, type: 'Entrada', quantity: 1, supplierId: alternateSupplier.payload.id, unitCost: 5, unitSalePrice: 25, reason: 'Entrada pelo operador' } })
+  const operatorEntry = await call('/movements', {
+    method: 'POST',
+    cookie: operator.cookie,
+    body: {
+      productId: product.payload.id,
+      type: 'Entrada',
+      quantity: 1,
+      supplierId: alternateSupplier.payload.id,
+      unitCost: 5,
+      unitSalePrice: 25,
+      reason: 'Entrada pelo operador',
+    },
+  })
   assert.equal(operatorEntry.status, 201)
-  const completeEntries = await call(`/products/${product.payload.id}/entries`, { cookie: operator.cookie })
+  const completeEntries = await call(`/products/${product.payload.id}/entries`, {
+    cookie: operator.cookie,
+  })
   assert.equal(completeEntries.status, 200)
   assert.equal(completeEntries.payload.length, 2)
   assert.equal(completeEntries.payload[0].supplier, alternateSupplier.payload.name)
@@ -426,52 +873,188 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.equal(Number(completeEntries.payload[0].unitSalePrice), 25)
   const latestPurchases = await call('/suppliers/last-purchases', { cookie: admin.cookie })
   assert.equal(latestPurchases.status, 200)
-  const supplierPrices = latestPurchases.payload.filter((purchase) => purchase.productId === product.payload.id)
+  const supplierPrices = latestPurchases.payload.filter(
+    (purchase) => purchase.productId === product.payload.id,
+  )
   assert.equal(supplierPrices.length, 2)
-  assert.equal(Number(supplierPrices.find((purchase) => purchase.supplierId === alternateSupplier.payload.id).unitCost), 5)
-  assert.equal(Number(supplierPrices.find((purchase) => purchase.supplierId === supplier.payload.id).unitCost), 10)
-  const competitorPrices = await call(`/suppliers/${supplier.payload.id}/comparisons`, { cookie: admin.cookie })
+  assert.equal(
+    Number(
+      supplierPrices.find((purchase) => purchase.supplierId === alternateSupplier.payload.id)
+        .unitCost,
+    ),
+    5,
+  )
+  assert.equal(
+    Number(supplierPrices.find((purchase) => purchase.supplierId === supplier.payload.id).unitCost),
+    10,
+  )
+  const competitorPrices = await call(`/suppliers/${supplier.payload.id}/comparisons`, {
+    cookie: admin.cookie,
+  })
   assert.equal(competitorPrices.status, 200)
-  const competingProductPrices = competitorPrices.payload.filter((record) => record.productId === product.payload.id)
+  const competingProductPrices = competitorPrices.payload.filter(
+    (record) => record.productId === product.payload.id,
+  )
   assert.equal(competingProductPrices.length, 2)
-  assert.equal(Number(competingProductPrices.find((record) => record.supplierId === alternateSupplier.payload.id).lastPurchaseCost), 5)
-  assert.equal(Number(competingProductPrices.find((record) => record.supplierId === alternateSupplier.payload.id).lastQuotePrice), 4.15)
-  assert.equal(competingProductPrices.find((record) => record.supplierId === supplier.payload.id).lastQuotePrice, null)
-  const productSupplierPrices = await call(`/products/${product.payload.id}/suppliers`, { cookie: admin.cookie })
+  assert.equal(
+    Number(
+      competingProductPrices.find((record) => record.supplierId === alternateSupplier.payload.id)
+        .lastPurchaseCost,
+    ),
+    5,
+  )
+  assert.equal(
+    Number(
+      competingProductPrices.find((record) => record.supplierId === alternateSupplier.payload.id)
+        .lastQuotePrice,
+    ),
+    4.15,
+  )
+  assert.equal(
+    competingProductPrices.find((record) => record.supplierId === supplier.payload.id)
+      .lastQuotePrice,
+    null,
+  )
+  const productSupplierPrices = await call(`/products/${product.payload.id}/suppliers`, {
+    cookie: admin.cookie,
+  })
   assert.equal(productSupplierPrices.status, 200)
   assert.equal(productSupplierPrices.payload.length, 2)
-  assert.equal(Number(productSupplierPrices.payload.find((record) => record.supplierId === supplier.payload.id).lastPurchaseCost), 10)
-  assert.equal(productSupplierPrices.payload.find((record) => record.supplierId === supplier.payload.id).lastQuotePrice, null)
-  assert.equal(Number(productSupplierPrices.payload.find((record) => record.supplierId === alternateSupplier.payload.id).lastPurchaseCost), 5)
-  assert.equal(Number(productSupplierPrices.payload.find((record) => record.supplierId === alternateSupplier.payload.id).lastQuotePrice), 4.15)
-  assert.equal(productSupplierPrices.payload.find((record) => record.supplierId === supplier.payload.id).purchases.length, 1)
-  assert.equal(productSupplierPrices.payload.find((record) => record.supplierId === alternateSupplier.payload.id).quotes.length, 2)
-  const secondPurchase = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: product.payload.id, type: 'Entrada', quantity: 1, supplierId: supplier.payload.id, unitCost: 20, unitSalePrice: 25, reason: 'Reposição com custo maior' } })
+  assert.equal(
+    Number(
+      productSupplierPrices.payload.find((record) => record.supplierId === supplier.payload.id)
+        .lastPurchaseCost,
+    ),
+    10,
+  )
+  assert.equal(
+    productSupplierPrices.payload.find((record) => record.supplierId === supplier.payload.id)
+      .lastQuotePrice,
+    null,
+  )
+  assert.equal(
+    Number(
+      productSupplierPrices.payload.find(
+        (record) => record.supplierId === alternateSupplier.payload.id,
+      ).lastPurchaseCost,
+    ),
+    5,
+  )
+  assert.equal(
+    Number(
+      productSupplierPrices.payload.find(
+        (record) => record.supplierId === alternateSupplier.payload.id,
+      ).lastQuotePrice,
+    ),
+    4.15,
+  )
+  assert.equal(
+    productSupplierPrices.payload.find((record) => record.supplierId === supplier.payload.id)
+      .purchases.length,
+    1,
+  )
+  assert.equal(
+    productSupplierPrices.payload.find(
+      (record) => record.supplierId === alternateSupplier.payload.id,
+    ).quotes.length,
+    2,
+  )
+  const secondPurchase = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: product.payload.id,
+      type: 'Entrada',
+      quantity: 1,
+      supplierId: supplier.payload.id,
+      unitCost: 20,
+      unitSalePrice: 25,
+      reason: 'Reposição com custo maior',
+    },
+  })
   assert.equal(secondPurchase.status, 201)
-  const updatedSupplierHistory = await call(`/products/${product.payload.id}/suppliers`, { cookie: admin.cookie })
-  assert.equal(updatedSupplierHistory.payload.find((record) => record.supplierId === supplier.payload.id).purchases.length, 2)
+  const updatedSupplierHistory = await call(`/products/${product.payload.id}/suppliers`, {
+    cookie: admin.cookie,
+  })
+  assert.equal(
+    updatedSupplierHistory.payload.find((record) => record.supplierId === supplier.payload.id)
+      .purchases.length,
+    2,
+  )
   const productAfterPurchase = await call('/products', { cookie: admin.cookie })
-  const weightedProduct = productAfterPurchase.payload.find((item) => item.id === product.payload.id)
+  const weightedProduct = productAfterPurchase.payload.find(
+    (item) => item.id === product.payload.id,
+  )
   assert.equal(Number(weightedProduct.averageCost), 10.5)
 
-  const fifoProduct = await call('/products', { method: 'POST', cookie: admin.cookie, body: { code: `FIFO-${suffix}`, name: `Produto FIFO ${suffix}`, categoryId: category.payload.id, unit: 'Fardo', initialStock: 0, minimum: 0, price: 25 } })
+  const fifoProduct = await call('/products', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      code: `FIFO-${suffix}`,
+      name: `Produto FIFO ${suffix}`,
+      categoryId: category.payload.id,
+      unit: 'Fardo',
+      initialStock: 0,
+      minimum: 0,
+      price: 25,
+    },
+  })
   assert.equal(fifoProduct.status, 201)
   assert.equal(fifoProduct.payload.unit, 'Fardo')
-  const fifoPurchaseOld = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: fifoProduct.payload.id, type: 'Entrada', quantity: 2, supplierId: supplier.payload.id, unitCost: 10, unitSalePrice: 20, occurredAt: '2026-10-20' } })
-  const fifoPurchaseNew = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: fifoProduct.payload.id, type: 'Entrada', quantity: 2, supplierId: alternateSupplier.payload.id, unitCost: 20, unitSalePrice: 30, occurredAt: '2026-10-21' } })
+  const fifoPurchaseOld = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: fifoProduct.payload.id,
+      type: 'Entrada',
+      quantity: 2,
+      supplierId: supplier.payload.id,
+      unitCost: 10,
+      unitSalePrice: 20,
+      occurredAt: '2026-10-20',
+    },
+  })
+  const fifoPurchaseNew = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: fifoProduct.payload.id,
+      type: 'Entrada',
+      quantity: 2,
+      supplierId: alternateSupplier.payload.id,
+      unitCost: 20,
+      unitSalePrice: 30,
+      occurredAt: '2026-10-21',
+    },
+  })
   assert.equal(fifoPurchaseOld.status, 201)
   assert.equal(fifoPurchaseNew.status, 201)
-  const fifoSale = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: fifoProduct.payload.id, type: 'Saída', quantity: 3, unitSalePrice: 25, occurredAt: '2026-10-22' } })
+  const fifoSale = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: fifoProduct.payload.id,
+      type: 'Saída',
+      quantity: 3,
+      unitSalePrice: 25,
+      occurredAt: '2026-10-22',
+    },
+  })
   assert.equal(fifoSale.status, 201)
   assert.equal(fifoSale.payload.fifoCost, 40)
   assert.equal(fifoSale.payload.margin, 35)
-  const fifoReport = await call(`/reports?period=7d&productId=${fifoProduct.payload.id}`, { cookie: admin.cookie })
+  const fifoReport = await call(`/reports?period=7d&productId=${fifoProduct.payload.id}`, {
+    cookie: admin.cookie,
+  })
   assert.equal(fifoReport.status, 200)
   assert.equal(Number(fifoReport.payload.summary.outgoingCost), 40)
   assert.equal(Number(fifoReport.payload.summary.recordedRevenue), 75)
   assert.equal(Number(fifoReport.payload.summary.realizedMargin), 35)
   assert.equal(Number(fifoReport.payload.summary.remainingCost), 20)
-  const fifoProductMargin = fifoReport.payload.productMargins.find((item) => item.productId === fifoProduct.payload.id)
+  const fifoProductMargin = fifoReport.payload.productMargins.find(
+    (item) => item.productId === fifoProduct.payload.id,
+  )
   assert.equal(fifoProductMargin.purchaseCount, 2)
   assert.equal(fifoProductMargin.unitsPurchased, 4)
   assert.equal(Number(fifoProductMargin.purchaseCost), 60)
@@ -482,55 +1065,252 @@ test('fluxos de autenticação, permissões, estoque e auditoria persistem no ba
   assert.equal(Number(fifoProductMargin.realizedMargin), 35)
   assert.equal(fifoProductMargin.knownUnits, 1)
   assert.equal(Number(fifoProductMargin.forecastMargin), 10)
-  const supplierFifoReport = await call(`/reports?period=7d&productId=${fifoProduct.payload.id}&supplierId=${supplier.payload.id}`, { cookie: admin.cookie })
+  const comparedFifoReport = await call(
+    `/reports?period=7d&productId=${fifoProduct.payload.id}&compare=previous`,
+    { cookie: admin.cookie },
+  )
+  assert.equal(comparedFifoReport.status, 200)
+  assert.ok(comparedFifoReport.payload.comparison)
+  const shiftDate = (dateValue, days) => {
+    const date = new Date(`${dateValue}T00:00:00.000Z`)
+    date.setUTCDate(date.getUTCDate() + days)
+    return date.toISOString().slice(0, 10)
+  }
+  const currentDays =
+    Math.round(
+      (Date.parse(`${comparedFifoReport.payload.range.to}T00:00:00.000Z`) -
+        Date.parse(`${comparedFifoReport.payload.range.from}T00:00:00.000Z`)) /
+        86400000,
+    ) + 1
+  assert.equal(
+    comparedFifoReport.payload.comparison.range.to,
+    shiftDate(comparedFifoReport.payload.range.from, -1),
+  )
+  assert.equal(
+    comparedFifoReport.payload.comparison.range.from,
+    shiftDate(comparedFifoReport.payload.comparison.range.to, -(currentDays - 1)),
+  )
+  assert.equal(Number(comparedFifoReport.payload.comparison.summary.realizedMargin), 0)
+  const supplierFifoReport = await call(
+    `/reports?period=7d&productId=${fifoProduct.payload.id}&supplierId=${supplier.payload.id}`,
+    { cookie: admin.cookie },
+  )
   assert.equal(supplierFifoReport.payload.summary.unitsOut, 2)
   assert.equal(Number(supplierFifoReport.payload.summary.recordedRevenue), 50)
   assert.equal(Number(supplierFifoReport.payload.summary.outgoingCost), 20)
   assert.equal(Number(supplierFifoReport.payload.summary.realizedMargin), 30)
-  const supplierFifoSale = await call(`/reports/product/${fifoProduct.payload.id}/movements?period=7d&supplierId=${supplier.payload.id}`, { cookie: admin.cookie })
-  const supplierFifoSaleRow = supplierFifoSale.payload.movements.find((movement) => movement.type.startsWith('Sa'))
+  const supplierFifoSale = await call(
+    `/reports/product/${fifoProduct.payload.id}/movements?period=7d&supplierId=${supplier.payload.id}`,
+    { cookie: admin.cookie },
+  )
+  const supplierFifoSaleRow = supplierFifoSale.payload.movements.find((movement) =>
+    movement.type.startsWith('Sa'),
+  )
   assert.equal(supplierFifoSaleRow.quantity, -2)
   assert.equal(Number(supplierFifoSaleRow.fifoCost), 20)
-  const fifoDetailFirstPage = await call(`/reports/product/${fifoProduct.payload.id}/movements?period=7d&page=1&limit=2`, { cookie: admin.cookie })
+  const fifoDetailFirstPage = await call(
+    `/reports/product/${fifoProduct.payload.id}/movements?period=7d&page=1&limit=2`,
+    { cookie: admin.cookie },
+  )
   assert.equal(fifoDetailFirstPage.status, 200)
   assert.equal(fifoDetailFirstPage.payload.total, 3)
   assert.equal(fifoDetailFirstPage.payload.movements.length, 2)
-  const fifoDetailSecondPage = await call(`/reports/product/${fifoProduct.payload.id}/movements?period=7d&page=2&limit=2`, { cookie: admin.cookie })
+  const fifoDetailSecondPage = await call(
+    `/reports/product/${fifoProduct.payload.id}/movements?period=7d&page=2&limit=2`,
+    { cookie: admin.cookie },
+  )
   assert.equal(fifoDetailSecondPage.payload.movements.length, 1)
-  const fifoFullHistory = await call(`/reports/product/${fifoProduct.payload.id}/movements?period=all&limit=25`, { cookie: admin.cookie })
+  const fifoFullHistory = await call(
+    `/reports/product/${fifoProduct.payload.id}/movements?period=all&limit=25`,
+    { cookie: admin.cookie },
+  )
   assert.equal(fifoFullHistory.payload.total, 3)
-  const blockedPurchaseReverse = await call(`/movements/${fifoPurchaseOld.payload.id}/reverse`, { method: 'POST', cookie: admin.cookie, body: { reason: 'Teste de proteção contra saída descoberta' } })
+  const blockedPurchaseReverse = await call(`/movements/${fifoPurchaseOld.payload.id}/reverse`, {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: { reason: 'Teste de proteção contra saída descoberta' },
+  })
   assert.equal(blockedPurchaseReverse.status, 409)
   assert.equal(blockedPurchaseReverse.payload.error.code, 'PURCHASE_CORRECTION_CONFLICT')
-  const correctedPurchase = await call(`/movements/${fifoPurchaseOld.payload.id}`, { method: 'PATCH', cookie: admin.cookie, body: { reason: 'Ajuste da quantidade recebida', quantity: 3, supplierId: supplier.payload.id, unitCost: 10, unitSalePrice: 20, occurredAt: '2026-10-20' } })
+  const correctedPurchase = await call(`/movements/${fifoPurchaseOld.payload.id}`, {
+    method: 'PATCH',
+    cookie: admin.cookie,
+    body: {
+      reason: 'Ajuste da quantidade recebida',
+      quantity: 3,
+      supplierId: supplier.payload.id,
+      unitCost: 10,
+      unitSalePrice: 20,
+      occurredAt: '2026-10-20',
+    },
+  })
   assert.equal(correctedPurchase.status, 200)
-  const fifoEntriesAfterCorrection = await call(`/products/${fifoProduct.payload.id}/entries`, { cookie: admin.cookie })
+  const fifoEntriesAfterCorrection = await call(`/products/${fifoProduct.payload.id}/entries`, {
+    cookie: admin.cookie,
+  })
   assert.equal(fifoEntriesAfterCorrection.status, 200)
-  assert.equal(fifoEntriesAfterCorrection.payload.find((entry) => entry.id === fifoPurchaseOld.payload.id).quantityRemaining, 0)
-  assert.equal(fifoEntriesAfterCorrection.payload.find((entry) => entry.id === fifoPurchaseNew.payload.id).quantityRemaining, 2)
-  assert.equal((await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: fifoProduct.payload.id, type: 'Saída', quantity: 2, unitSalePrice: 25 } })).status, 201)
-  assert.equal((await call(`/products/${fifoProduct.payload.id}`, { method: 'DELETE', cookie: admin.cookie })).status, 204)
+  assert.equal(
+    fifoEntriesAfterCorrection.payload.find((entry) => entry.id === fifoPurchaseOld.payload.id)
+      .quantityRemaining,
+    0,
+  )
+  assert.equal(
+    fifoEntriesAfterCorrection.payload.find((entry) => entry.id === fifoPurchaseNew.payload.id)
+      .quantityRemaining,
+    2,
+  )
+  assert.equal(
+    (
+      await call('/movements', {
+        method: 'POST',
+        cookie: admin.cookie,
+        body: { productId: fifoProduct.payload.id, type: 'Saída', quantity: 2, unitSalePrice: 25 },
+      })
+    ).status,
+    201,
+  )
+  assert.equal(
+    (await call(`/products/${fifoProduct.payload.id}`, { method: 'DELETE', cookie: admin.cookie }))
+      .status,
+    204,
+  )
 
-  const belowAverageSale = await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: product.payload.id, type: 'Saída', quantity: 1, unitSalePrice: 9 } })
+  const belowAverageSale = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: { productId: product.payload.id, type: 'Saída', quantity: 1, unitSalePrice: 9 },
+  })
   assert.equal(belowAverageSale.status, 409)
   assert.equal(belowAverageSale.payload.error.code, 'SALE_BELOW_COST')
-  const belowAverageEdit = await call(`/products/${product.payload.id}`, { method: 'PATCH', cookie: admin.cookie, body: { code: product.payload.code, name: changedProduct.payload.name, categoryId: category.payload.id, supplierId: supplier.payload.id, unit: 'Unidade', minimum: 4, price: 10 } })
+  const belowAverageEdit = await call(`/products/${product.payload.id}`, {
+    method: 'PATCH',
+    cookie: admin.cookie,
+    body: {
+      code: product.payload.code,
+      name: changedProduct.payload.name,
+      categoryId: category.payload.id,
+      supplierId: supplier.payload.id,
+      unit: 'Unidade',
+      minimum: 4,
+      price: 10,
+    },
+  })
   assert.equal(belowAverageEdit.status, 409)
-  assert.equal((await call(`/suppliers/${alternateSupplier.payload.id}/status`, { method: 'PATCH', cookie: operator.cookie, body: { active: false } })).status, 403)
+  assert.equal(
+    (
+      await call(`/suppliers/${alternateSupplier.payload.id}/status`, {
+        method: 'PATCH',
+        cookie: operator.cookie,
+        body: { active: false },
+      })
+    ).status,
+    403,
+  )
   assert.equal((await call('/suppliers?status=all', { cookie: operator.cookie })).status, 403)
-  assert.equal((await call(`/categories/${category.payload.id}`, { method: 'DELETE', cookie: admin.cookie })).status, 409)
+  assert.equal(
+    (await call(`/categories/${category.payload.id}`, { method: 'DELETE', cookie: admin.cookie }))
+      .status,
+    409,
+  )
   const audit = await call('/audit', { cookie: admin.cookie })
   assert.equal(audit.status, 200)
   assert.ok(audit.payload.some((item) => item.action === 'registrou movimentação'))
 
-  const preventArchive = await call(`/products/${product.payload.id}`, { method: 'DELETE', cookie: admin.cookie })
+  const preventArchive = await call(`/products/${product.payload.id}`, {
+    method: 'DELETE',
+    cookie: admin.cookie,
+  })
   assert.equal(preventArchive.status, 409)
   assert.equal(preventArchive.payload.error.code, 'PRODUCT_HAS_STOCK')
-  assert.equal((await call('/movements', { method: 'POST', cookie: admin.cookie, body: { productId: product.payload.id, type: 'Saída', quantity: 10, unitSalePrice: 25, reason: 'Zerar produto de teste' } })).status, 201)
-  const deactivate = await call(`/products/${product.payload.id}`, { method: 'DELETE', cookie: admin.cookie })
+  assert.equal(
+    (
+      await call('/movements', {
+        method: 'POST',
+        cookie: admin.cookie,
+        body: {
+          productId: product.payload.id,
+          type: 'Saída',
+          quantity: 10,
+          unitSalePrice: 25,
+          reason: 'Zerar produto de teste',
+        },
+      })
+    ).status,
+    201,
+  )
+
+  const clockProduct = await call('/products', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      code: `QA-HORA-${suffix}`,
+      name: `Produto horário ${suffix}`,
+      categoryId: category.payload.id,
+      unit: 'Unidade',
+      initialStock: 0,
+      minimum: 0,
+      price: 10,
+    },
+  })
+  assert.equal(clockProduct.status, 201)
+  const beforeClockMovement = Date.now()
+  const clockMovement = await call('/movements', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: {
+      productId: clockProduct.payload.id,
+      type: 'Entrada',
+      quantity: 1,
+      supplierId: supplier.payload.id,
+      unitCost: 5,
+      unitSalePrice: 10,
+      occurredAt: fortalezaDate(),
+    },
+  })
+  assert.equal(clockMovement.status, 201)
+  const clockTimestamp = Date.parse(clockMovement.payload.date)
+  assert.equal(fortalezaDate(new Date(clockTimestamp)), fortalezaDate())
+  assert.ok(
+    Math.abs(clockTimestamp - beforeClockMovement) < 60_000,
+    'a movimentação deve guardar o horário real, não um horário fixo',
+  )
+  const clockEntry = (
+    await call(`/products/${clockProduct.payload.id}/entries`, { cookie: admin.cookie })
+  ).payload[0]
+  assert.equal(fortalezaDate(new Date(clockEntry.date)), fortalezaDate())
+  const deactivate = await call(`/products/${product.payload.id}`, {
+    method: 'DELETE',
+    cookie: admin.cookie,
+  })
   assert.equal(deactivate.status, 204)
-  assert.equal((await call(`/categories/${category.payload.id}`, { method: 'DELETE', cookie: admin.cookie })).status, 204)
-  assert.equal((await call(`/suppliers/${supplier.payload.id}`, { method: 'DELETE', cookie: admin.cookie })).status, 204)
-  assert.equal((await call('/auth/logout', { method: 'POST', cookie: operator.cookie })).status, 204)
+  assert.equal(
+    (
+      await call('/movements', {
+        method: 'POST',
+        cookie: admin.cookie,
+        body: { productId: clockProduct.payload.id, type: 'Saída', quantity: 1, unitSalePrice: 10 },
+      })
+    ).status,
+    201,
+  )
+  assert.equal(
+    (await call(`/products/${clockProduct.payload.id}`, { method: 'DELETE', cookie: admin.cookie }))
+      .status,
+    204,
+  )
+  assert.equal(
+    (await call(`/categories/${category.payload.id}`, { method: 'DELETE', cookie: admin.cookie }))
+      .status,
+    204,
+  )
+  assert.equal(
+    (await call(`/suppliers/${supplier.payload.id}`, { method: 'DELETE', cookie: admin.cookie }))
+      .status,
+    204,
+  )
+  assert.equal(
+    (await call('/auth/logout', { method: 'POST', cookie: operator.cookie })).status,
+    204,
+  )
   assert.equal((await call('/products', { cookie: operator.cookie })).status, 401)
 })

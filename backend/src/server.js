@@ -6,7 +6,7 @@ import { migrate } from './schema.js'
 const server = await (async () => {
   try {
     await migrate(database)
-    return app.listen(config.port, '0.0.0.0', () => {
+    return app.listen(config.port, config.host, () => {
       console.log(`Backend disponível na porta ${config.port}.`)
     })
   } catch (error) {

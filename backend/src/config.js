@@ -28,7 +28,10 @@ if (!sessionSecret || sessionSecret.length < 32) {
 let appOrigin
 try {
   const parsedOrigin = new URL(appOriginValue)
-  if (parsedOrigin.origin !== appOriginValue.replace(/\/$/, '') || (nodeEnv === 'production' && parsedOrigin.protocol !== 'https:')) {
+  if (
+    parsedOrigin.origin !== appOriginValue.replace(/\/$/, '') ||
+    (nodeEnv === 'production' && parsedOrigin.protocol !== 'https:')
+  ) {
     throw new Error()
   }
   appOrigin = parsedOrigin.origin
@@ -37,6 +40,7 @@ try {
 }
 
 export const config = {
+  host: process.env.HOST ?? '0.0.0.0',
   port,
   databaseUrl,
   sessionSecret,

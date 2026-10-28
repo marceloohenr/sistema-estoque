@@ -1,8 +1,8 @@
 # Sistema de Gestão de Estoque
 
-O sistema organiza o catálogo do armazém e registra compras, saídas e ajustes de estoque. Esta página reúne os diagramas usados na modelagem inicial do projeto e resume as principais regras do sistema.
+Esta pasta guarda os diagramas da modelagem inicial: os casos de uso dos dois perfis e as classes do domínio de estoque.
 
-> Os diagramas são conceituais e não detalham todas as rotinas que foram incorporadas durante o desenvolvimento, como o vínculo de vários fornecedores ao mesmo produto e o controle de compras por lote.
+Os desenhos representam a proposta inicial. O sistema passou a ter vários fornecedores por produto e compras por lote; esses detalhes estão no [guia de uso](../guia-do-sistema.md) e no código. O diagrama de classes não corresponde ao esquema completo do PostgreSQL.
 
 ## Casos de uso
 
@@ -21,7 +21,7 @@ No diagrama, `<<include>>` indica uma etapa comum e obrigatória do caso de uso.
 
 ![Diagrama de classes do Sistema de Gestão de Estoque](diagrama-classes.svg)
 
-A versão editável está em [diagrama-classes.puml](diagrama-classes.puml). O desenho mostra os conceitos centrais do modelo: usuários, categorias, fornecedores, produtos, saldo, movimentações e alertas. Ele não deve ser lido como uma representação completa das tabelas atuais do banco.
+A versão editável está em [diagrama-classes.puml](diagrama-classes.puml). O desenho reúne usuários, categorias, fornecedores, produtos, saldo, movimentações e alertas.
 
 ## Regras de negócio
 
@@ -33,7 +33,7 @@ A versão editável está em [diagrama-classes.puml](diagrama-classes.puml). O d
 - Cotações não são compras e não alteram o estoque.
 - Apenas administradores gerenciam cadastros administrativos e acessam os relatórios e a auditoria.
 
-## Escopo atual
+## O que está disponível hoje
 
 O administrador pode cadastrar produtos, categorias e fornecedores, vincular fornecedores aos produtos, registrar compras e cotações e consultar relatórios e auditoria. O operador pode consultar o estoque e registrar movimentações. O sistema também oferece alerta de estoque baixo, histórico por produto e fornecedor, comparação de custos, cadastro de imagens e exportação de relatórios em CSV.
 
